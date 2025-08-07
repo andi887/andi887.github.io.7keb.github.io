@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Jurnal 7 Kebiasaan Anak Indonesia Hebat</title>
+  <style>
+    /* ============ CSS ============ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #2c3e50;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      font-weight: 500;
+    }
+
+    input, select, textarea, td input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-top: 4px;
+    }
+
+    textarea {
+      height: 100px;
+      resize: vertical;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #4a90e2;
+      color: white;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 30px 0;
+      justify-content: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      background: #3498db;
+      color: white;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #2980b9;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      color: #7f8c8d;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .form-group {
+        grid-template-columns: 1fr;
+      }
+      table {
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📘 Jurnal 7 Kebiasaan Anak Indonesia Hebat</h1>
+      <p>Pemerintah RI | Menuju Indonesia Emas 2045</p>
+    </header>
+
+    <!-- Identitas Anak -->
+    <section class="card">
+      <h2>📝 Identitas Anak</h2>
+      <div class="form-group">
+        <label>Nama: <input type="text" id="nama" placeholder="Nama lengkap" /></label>
+        <label>Kelas: 
+          <select id="kelas">
+            <option>Kelas 1</option>
+            <option>Kelas 2</option>
+            <option>Kelas 3</option>
+            <option>Kelas 4</option>
+            <option>Kelas 5</option>
+            <option>Kelas 6</option>
+          </select>
+        </label>
+        <label>Sekolah: <input type="text" id="sekolah" placeholder="Nama sekolah" /></label>
+        <label>Bulan: 
+          <select id="bulan">
+            <option>Januari</option>
+            <option>Februari</option>
+            <option>Maret</option>
+            <option>April</option>
+            <option>Mei</option>
+            <option>Juni</option>
+            <option>Juli</option>
+            <option>Agustus</option>
+            <option>September</option>
+            <option>Oktober</option>
+            <option>November</option>
+            <option>Desember</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <!-- Profil Anak -->
+    <section class="card">
+      <h2>👦 Ayo Berkenalan!</h2>
+      <div class="form-group">
+        <label>Ulang Tahun: <input type="date" id="ultah" /></label>
+        <label>Keunikan Saya: <input type="text" id="keunikan" placeholder="Contoh: pandai melukis" /></label>
+        <label>Tempat Tinggal: <input type="text" id="alamat" placeholder="Kota/Kabupaten" /></label>
+        <label>Warna Kesukaan: <input type="text" id="warna" /></label>
+        <label>Hobi: <input type="text" id="hobi" /></label>
+        <label>Cita-cita: <input type="text" id="cita" /></label>
+        <label>Olahraga Kesukaan: <input type="text" id="olahraga" /></label>
+        <label>Makanan Kesukaan: <input type="text" id="makanan" /></label>
+        <label>Pelajaran Kesukaan: <input type="text" id="pelajaran" /></label>
+        <label>Jam Bangun: <input type="time" id="jamBangun" /></label>
+      </div>
+    </section>
+
+    <!-- 7 Kebiasaan Harian -->
+    <section class="card">
+      <h2>📅 7 Kebiasaan Anak Indonesia Hebat</h2>
+
+      <!-- Bangun Pagi -->
+      <h3>1. Bangun Pagi</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="bangunTable"></tbody>
+      </table>
+
+      <!-- Beribadah -->
+      <h3>2. Beribadah</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Subuh</th>
+            <th>Dzuhur</th>
+            <th>Ashar</th>
+            <th>Magrib</th>
+            <th>Isya</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="ibadahTable"></tbody>
+      </table>
+
+      <!-- Berolahraga -->
+      <h3>3. Berolahraga</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Mulai</th>
+            <th>Berakhir</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="olahragaTable"></tbody>
+      </table>
+
+      <!-- Makan Sehat -->
+      <h3>4. Makan Sehat dan Bergizi</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Menu Makanan</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="makanTable"></tbody>
+      </table>
+
+      <!-- Gemar Belajar -->
+      <h3>5. Gemar Belajar</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Buku yang Dipelajari</th>
+            <th>Informasi yang Didapat</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="belajarTable"></tbody>
+      </table>
+
+      <!-- Bermasyarakat -->
+      <h3>6. Bermasyarakat</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Hari/Tanggal</th>
+            <th>Kegiatan</th>
+            <th>Perasaanku</th>
+            <th>Paraf Ketua</th>
+          </tr>
+        </thead>
+        <tbody id="masyarakatTable"></tbody>
+      </table>
+
+      <!-- Tidur Cepat -->
+      <h3>7. Tidur Cepat</h3>
+      <p><strong>Catatan:</strong> Anak usia 6-13 tahun perlu tidur 9-11 jam per hari.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Tgl</th>
+            <th>Mulai</th>
+            <th>Berakhir</th>
+            <th>Paraf Ortu</th>
+          </tr>
+        </thead>
+        <tbody id="tidurTable"></tbody>
+      </table>
+    </section>
+
+    <!-- Rekap Akhir Bulan -->
+    <section class="card">
+      <h2>📊 Rekap Pemantauan Bulanan</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tujuh Kebiasaan</th>
+            <th>Belum Terbiasa</th>
+            <th>Sudah Terbiasa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Bangun Pagi</td>
+            <td><input type="radio" name="r1" value="0"></td>
+            <td><input type="radio" name="r1" value="1"></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Beribadah</td>
+            <td><input type="radio" name="r2" value="0"></td>
+            <td><input type="radio" name="r2" value="1"></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Berolahraga</td>
+            <td><input type="radio" name="r3" value="0"></td>
+            <td><input type="radio" name="r3" value="1"></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Makan Sehat dan Bergizi</td>
+            <td><input type="radio" name="r4" value="0"></td>
+            <td><input type="radio" name="r4" value="1"></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Gemar Belajar</td>
+            <td><input type="radio" name="r5" value="0"></td>
+            <td><input type="radio" name="r5" value="1"></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Bermasyarakat</td>
+            <td><input type="radio" name="r6" value="0"></td>
+            <td><input type="radio" name="r6" value="1"></td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Tidur Cepat</td>
+            <td><input type="radio" name="r7" value="0"></td>
+            <td><input type="radio" name="r7" value="1"></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Tanggapan Orang Tua -->
+    <section class="card">
+      <h2>💬 Tanggapan Orang Tua</h2>
+      <p>Tanggapan tentang penerapan 7 kebiasaan di rumah:</p>
+      <textarea id="tanggapan" placeholder="Tuliskan masukan, saran, atau kesan..."></textarea>
+      <p style="margin-top: 15px;"><strong>Nama Orang Tua:</strong> <input type="text" id="namaOrtu" style="width: 300px;"></p>
+    </section>
+
+    <!-- Tombol Aksi -->
+    <div class="actions">
+      <button onclick="simpanData()">💾 Simpan Data</button>
+      <button onclick="muatData()">🔁 Muat Data</button>
+      <button onclick="window.print()">🖨️ Cetak</button>
+      <button onclick="resetForm()">🗑️ Reset</button>
+    </div>
+
+    <footer>
+      <p>&copy; 2025 | Jurnal Pendidikan Karakter | Dibuat untuk Guru & Orang Tua</p>
+      <p><em>“Membentuk Anak Hebat untuk Indonesia Emas 2045”</em></p>
+    </footer>
+  </div>
+
+  <script>
+    // ============ JavaScript ============
+    // Buat tabel harian
+    function buatTabel(id, hariMulai = 1, hariAkhir = 31) {
+      const tbody = document.getElementById(id);
+      tbody.innerHTML = "";
+      for (let i = hariMulai; i <= hariAkhir; i++) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${i}</td>` + " ".repeat(3).split("").map(() => "<td></td>").join("");
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Inisialisasi tabel
+    window.onload = function () {
+      const hariIni = new Date().getDate();
+      const hariAkhir = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+
+      buatTabel("bangunTable", 1, hariAkhir);
+      buatTabel("ibadahTable", 1, hariAkhir);
+      buatTabel("olahragaTable", 1, hariAkhir);
+      buatTabel("makanTable", 1, hariAkhir);
+      buatTabel("belajarTable", 1, hariAkhir);
+      buatTabel("masyarakatTable", 1, hariAkhir);
+      buatTabel("tidurTable", 1, hariAkhir);
+
+      // Cek data tersimpan
+      const saved = localStorage.getItem("jurnalAnak");
+      if (saved && confirm("Data tersimpan ditemukan. Muat sekarang?")) {
+        muatData();
+      }
+    };
+
+    // Simpan semua data
+    function simpanData() {
+      const data = {
+        nama: document.getElementById("nama").value,
+        kelas: document.getElementById("kelas").value,
+        sekolah: document.getElementById("sekolah").value,
+        bulan: document.getElementById("bulan").value,
+        ultah: document.getElementById("ultah").value,
+        keunikan: document.getElementById("keunikan").value,
+        alamat: document.getElementById("alamat").value,
+        warna: document.getElementById("warna").value,
+        hobi: document.getElementById("hobi").value,
+        cita: document.getElementById("cita").value,
+        olahraga: document.getElementById("olahraga").value,
+        makanan: document.getElementById("makanan").value,
+        pelajaran: document.getElementById("pelajaran").value,
+        jamBangun: document.getElementById("jamBangun").value,
+        tanggapan: document.getElementById("tanggapan").value,
+        namaOrtu: document.getElementById("namaOrtu").value,
+        rekap: {}
+      };
+
+      // Simpan rekap
+      for (let i = 1; i <= 7; i++) {
+        const r = document.querySelector(`input[name="r${i}"]:checked`);
+        data.rekap[i] = r ? r.value : "0";
+      }
+
+      localStorage.setItem("jurnalAnak", JSON.stringify(data));
+      alert("✅ Data berhasil disimpan!");
+    }
+
+    // Muat data
+    function muatData() {
+      const saved = localStorage.getItem("jurnalAnak");
+      if (!saved) {
+        alert("❌ Belum ada data tersimpan.");
+        return;
+      }
+
+      const data = JSON.parse(saved);
+
+      document.getElementById("nama").value = data.nama || "";
+      document.getElementById("kelas").value = data.kelas || "";
+      document.getElementById("sekolah").value = data.sekolah || "";
+      document.getElementById("bulan").value = data.bulan || "";
+      document.getElementById("ultah").value = data.ultah || "";
+      document.getElementById("keunikan").value = data.keunikan || "";
+      document.getElementById("alamat").value = data.alamat || "";
+      document.getElementById("warna").value = data.warna || "";
+      document.getElementById("hobi").value = data.hobi || "";
+      document.getElementById("cita").value = data.cita || "";
+      document.getElementById("olahraga").value = data.olahraga || "";
+      document.getElementById("makanan").value = data.makanan || "";
+      document.getElementById("pelajaran").value = data.pelajaran || "";
+      document.getElementById("jamBangun").value = data.jamBangun || "";
+      document.getElementById("tanggapan").value = data.tanggapan || "";
+      document.getElementById("namaOrtu").value = data.namaOrtu || "";
+
+      // Muat rekap
+      for (let i = 1; i <= 7; i++) {
+        if (data.rekap[i] === "1") {
+          document.querySelector(`input[name="r${i}"][value="1"]`).checked = true;
+        } else {
+          document.querySelector(`input[name="r${i}"][value="0"]`).checked = true;
+        }
+      }
+
+      alert("✅ Data berhasil dimuat!");
+    }
+
+    // Reset form
+    function resetForm() {
+      if (confirm("⚠️ Yakin ingin menghapus semua data?")) {
+        localStorage.removeItem("jurnalAnak");
+        location.reload();
+      }
+    }
+  </script>
+</body>
+</html>
