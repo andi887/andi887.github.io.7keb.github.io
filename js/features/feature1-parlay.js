@@ -15,16 +15,17 @@ App.FeatureLoaders.parlay = function(userRef) {
   let teamsData = {};
   let allTeams = [];
 
-  // === LOAD TEAMS.JSON (BARU — tidak mengubah logika lama) ===
+  // === LOAD TEAMS.JSON ===
   async function loadTeams() {
     try {
       const response = await fetch('data/teams.json');
-      if (!response.ok) throw new Error('Gagal memuat teams.json');
+      if (!response.ok) throw new Error('HTTP ' + response.status);
       teamsData = await response.json();
       allTeams = Object.values(teamsData).flat();
       console.log(`✅ Loaded ${allTeams.length} teams dari data/teams.json`);
+      console.log('📋 Daftar liga:', Object.keys(teamsData));
     } catch (err) {
-      console.warn('⚠️ teams.json tidak bisa diload, input manual tetap aktif:', err.message);
+      console.error('❌ Gagal memuat teams.json:', err.message);
       teamsData = {};
       allTeams = [];
     }
@@ -37,13 +38,13 @@ App.FeatureLoaders.parlay = function(userRef) {
       <div id="matches"></div>
       <div class="match-controls">
         <button class="btn-secondary" id="btnTambah">➕ Tambah Pertandingan</button>
-        <button class="btn-secondary" id="btnHapus"> Hapus Pertandingan</button>
+        <button class="btn-secondary" id="btnHapus">➖ Hapus Pertandingan</button>
       </div>
       <div class="parlay-input">
         <h3>Odds Parlay dari Bandar</h3>
         <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00">
         <p class="hint">Masukkan odds akumulasi (opsional)</p>
-        <button class="btn-secondary" id="btnLihatAdil">️ Lihat Odds Adil</button>
+        <button class="btn-secondary" id="btnLihatAdil">👁️ Lihat Odds Adil</button>
       </div>
       <div class="action-buttons">
         <button class="btn-primary" id="btnHitung">Hitung Analisis, Parlay & EV</button>
@@ -72,14 +73,16 @@ App.FeatureLoaders.parlay = function(userRef) {
     renderPertandingan();
   }
 
-  // === RENDER DATALIST TIM (BARU) ===
+  // === RENDER DATALIST TIM ===
   function renderTeamDatalist() {
     const datalist = document.getElementById('teamDatalist');
-    if (!datalist) return;
-    datalist.innerHTML = allTeams
-      .sort((a, b) => a.localeCompare(b))
-      .map(t => `<option value="${t}">`)
-      .join('');
+    if (!datalist) {
+      console.warn('⚠️ Element #teamDatalist tidak ditemukan');
+      return;
+    }
+    const sorted = [...new Set(allTeams)].sort((a, b) => a.localeCompare(b));
+    datalist.innerHTML = sorted.map(t => `<option value="${t}">`).join('');
+    console.log(`✅ Datalist terisi dengan ${sorted.length} tim unik`);
   }
 
   function bindEvents() {
@@ -121,7 +124,6 @@ App.FeatureLoaders.parlay = function(userRef) {
         ? `<div><label>Tanggal:<br><input type="date" id="date1" value="${data.matchDate||''}" style="width:120px;text-align:center;"></label></div>` 
         : "";
 
-      // TAMBAHAN: list="teamDatalist" untuk autocomplete (input tetap bisa manual)
       html += `
         <div class="match">
           <h3>Pertandingan ${i}</h3>
@@ -192,7 +194,6 @@ App.FeatureLoaders.parlay = function(userRef) {
     }
   }
 
-  // LOGIKA ASLI: updateOverUnder (TIDAK DIUBAH SAMA SEKALI)
   function updateOverUnder(idx) {
     const a = parseFloat(document.getElementById(`A${idx}`)?.value);
     const d = parseFloat(document.getElementById(`D${idx}`)?.value);
@@ -384,7 +385,7 @@ App.FeatureLoaders.parlay = function(userRef) {
       });
   }
 
-  // === LOAD DATA DARI FIREBASE (TIDAK DIUBAH) ===
+  // === LOAD DATA DARI FIREBASE ===
   App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
     firebaseParlayData = Array.isArray(val)?val:[];
     jumlahPertandingan = Math.max(1, firebaseParlayData.length);
