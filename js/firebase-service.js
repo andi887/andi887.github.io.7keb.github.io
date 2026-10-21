@@ -1,10 +1,10 @@
 /**
  * firebase-service.js
- * Semua operasi Firebase (Auth + Database) dikumpulkan di sini.
- * Fitur lain TIDAK boleh langsung panggil firebase.xxx, 
- * tapi harus lewat App.Service.xxx
+ * Semua operasi Firebase (Auth + Database) + Registry Fitur
+ * Tidak ada logika bisnis fitur di sini.
  */
 
+// Pastikan App namespace ada
 const App = window.App || {};
 
 App.Service = {
@@ -65,7 +65,7 @@ App.Service = {
   }
 };
 
-// === AUTH HANDLER (digunakan oleh index.html) ===
+// === AUTH HANDLER ===
 App.Auth = {
   isLoginMode: true,
   currentUser: null,
@@ -93,7 +93,7 @@ App.Auth = {
       return;
     }
     if (password.length < 6) {
-      alert("⚠️ Password minimal 6 karakter!");
+      alert("️ Password minimal 6 karakter!");
       return;
     }
 
@@ -136,15 +136,12 @@ App.Auth = {
   },
 
   init() {
-    // Toggle mode
     document.getElementById('authToggle').addEventListener('click', () => this.toggleMode());
 
-    // Tombol login di header
     document.getElementById('btnLogin').onclick = () => {
       document.getElementById('loginForm').style.display = 'block';
     };
 
-    // Logout
     document.getElementById('btnLogout').onclick = () => {
       App.Service.signOut().then(() => {
         this.currentUser = null;
@@ -153,7 +150,6 @@ App.Auth = {
       });
     };
 
-    // Listener status auth
     App.Service.onAuthStateChanged(user => {
       this.currentUser = user;
       this.updateUI();
@@ -164,5 +160,15 @@ App.Auth = {
   }
 };
 
+// ✅ PENTING: Registry fitur didefinisikan di sini agar tersedia sebelum feature files di-load
+App.FeatureLoaders = {};
+
+// Expose ke global
 window.App = App;
+
+// Inisialisasi Auth saat DOM siap
+document.addEventListener('DOMContentLoaded', () => {
+  App.Auth.init();
+});
+
 console.log("✅ Firebase Service loaded");
