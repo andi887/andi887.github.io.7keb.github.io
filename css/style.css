@@ -83,28 +83,52 @@ th { background-color: #f0f8ff; }
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 20px; }
 .tool-card { background: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; }
 .tool-card h3 { margin-bottom: 10px; }
-/* === FITUR 6: KLASEMEN LIVE === */
-#standingsTable {
+/* === FITUR 6: KLASEMEN MANUAL === */
+#klasemenTable {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95em;
 }
-#standingsTable th {
+#klasemenTable th {
   background-color: #1a73e8;
   color: white;
   padding: 10px;
   text-align: center;
+  position: sticky;
+  top: 0;
 }
-#standingsTable td {
-  padding: 8px;
+#klasemenTable td {
+  padding: 6px 8px;
   text-align: center;
   border-bottom: 1px solid #eee;
 }
-/* Highlight Top 4 (Zona Liga Champions) */
-#standingsTable tbody tr:nth-child(-n+4) {
-  background-color: #e3f2fd;
+.stat-input {
+  width: 50px;
+  padding: 4px;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 0.9em;
 }
-/* Highlight Bottom 3 (Zona Degradasi) */
-#standingsTable tbody tr:nth-last-child(-n+3) {
-  background-color: #ffebee;
+.stat-input:focus {
+  border-color: #1a73e8;
+  outline: none;
+}
+.points-input {
+  font-weight: bold;
+  background-color: #fff8e1;
+}
+.gd-cell {
+  font-weight: bold;
+  color: #555;
+}
+
+/* Zona Highlighting */
+.zone-ucl { background-color: #e3f2fd; }         /* Biru muda - Liga Champions */
+.zone-uel { background-color: #fff3e0; }         /* Oranye muda - Europa League */
+.zone-conference { background-color: #f3e5f5; }  /* Ungu muda - Conference League */
+.zone-relegation { background-color: #ffebee; }  /* Merah muda - Degradasi */
+
+#klasemenTable tbody tr:hover {
+  background-color: #f5f5f5 !important;
 }
