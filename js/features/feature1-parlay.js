@@ -1,9 +1,11 @@
-**
- * feature1-parlay.js - FIXED VERSION
+/**
+ * feature1-parlay.js
  * Fitur 1: Analisis Parlay + Over/Under
  * MANDIRI — dengan autocomplete tim dari data/teams.json
- * SEMUA LOGIKA ASLI DIPERTAHANKAN - HANYA BUGFIX
+ * SEMUA LOGIKA ASLI DIPERTAHANKAN - VERSI FIX 400+ BARIS
+ * FIX: #teamDatalist, alt= , Firebase deactivated
  */
+window.App = window.App || {};
 App.FeatureLoaders = App.FeatureLoaders || {};
 
 App.FeatureLoaders.parlay = function(userRef) {
@@ -14,36 +16,43 @@ App.FeatureLoaders.parlay = function(userRef) {
   let temporaryMatchData = null;
   let teamsData = {};
   let allTeams = [];
+
+  // === FIX: LOCAL STORAGE FALLBACK UNTUK FIREBASE DEACTIVATED ===
+  const LOCAL_KEY = 'parlayData_local';
   let firebaseAvailable = true;
 
-  // === DETEKSI FIREBASE DEACTIVATED ===
-  function handleFirebaseError(err) {
-    if (err && err.message && err.message.includes('deactivated')) {
-      firebaseAvailable = false;
-      console.warn('⚠ Firebase deactivated, beralih ke localStorage mode');
-      return true;
+  function saveLocal(data) {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('Gagal save local', e);
     }
-    // Deteksi error dari logger.ts: FIREBASE WARNING
-    if (err && err.code === 'DATABASE_UNAVAILABLE') {
-      firebaseAvailable = false;
-      return true;
-    }
-    return false;
   }
 
-  // === LOCAL STORAGE FALLBACK ===
-  const LOCAL_KEY = 'parlayData_local';
-  function saveLocal(data) {
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(data)); } catch(e){}
-  }
   function loadLocal() {
     try {
       const raw = localStorage.getItem(LOCAL_KEY);
       return raw ? JSON.parse(raw) : [];
-    } catch(e){ return []; }
+    } catch (e) {
+      return [];
+    }
   }
+
   function removeLocal() {
-    try { localStorage.removeItem(LOCAL_KEY); } catch(e){}
+    try {
+      localStorage.removeItem(LOCAL_KEY);
+    } catch (e) {}
+  }
+
+  function handleFirebaseError(err) {
+    if (!err) return false;
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('deactivated') || msg.includes('permission_denied') || msg.includes('unavailable')) {
+      firebaseAvailable = false;
+      console.warn('⚠ Firebase tidak tersedia, pakai mode offline:', err.message);
+      return true;
+    }
+    return false;
   }
 
   // === LOAD TEAMS.JSON ===
@@ -57,6 +66,17 @@ App.FeatureLoaders.parlay = function(userRef) {
       console.log('📋 Daftar liga:', Object.keys(teamsData));
     } catch (err) {
       console.error('❌ Gagal memuat teams.json:', err.message);
+      // FIX: coba path alternatif untuk Github Pages nested
+      try {
+        const response2 = await fetch('./data/teams.json');
+        if (response2.ok) {
+          teamsData = await response2.json();
+          allTeams = Object.values(teamsData).flat();
+          console.log(`✅ Loaded ${allTeams.length} teams dari ./data/teams.json (fallback)`);
+          console.log('📋 Daftar liga:', Object.keys(teamsData));
+          return;
+        }
+      } catch (e2) {}
       teamsData = {};
       allTeams = [];
     }
@@ -98,37 +118,42 @@ App.FeatureLoaders.parlay = function(userRef) {
       </div>
       <div id="hasil"></div>
       <datalist id="teamDatalist"></datalist>
+      <datalist id="teamDataList"></datalist>
     `;
 
     bindEvents();
-    // FIX: Render pertandingan dulu, baru isi datalist
     renderPertandingan();
+    // FIX: renderTeamDatalist dipanggil SETELAH renderHTML agar element ada
     renderTeamDatalist();
   }
 
-  // === RENDER DATALIST TIM - FIXED ===
+  // === RENDER DATALIST TIM ===
   function renderTeamDatalist() {
-    // FIX: Cari kedua ID untuk backward compatibility
-    let datalist = document.getElementById('teamDatalist') || document.getElementById('teamDataList');
-    if (!datalist) {
-      // Auto-create jika tidak ada (fix untuk screenshot error)
+    // FIX: support kedua ID untuk backward compatibility
+    let datalist = document.getElementById('teamDatalist');
+    let datalist2 = document.getElementById('teamDataList');
+
+    if (!datalist && !datalist2) {
       console.warn('⚠ Element #teamDatalist tidak ditemukan, auto-create');
       datalist = document.createElement('datalist');
       datalist.id = 'teamDatalist';
       document.body.appendChild(datalist);
-      // Juga buat alias teamDataList untuk kompatibilitas lama
-      const alias = document.createElement('datalist');
-      alias.id = 'teamDataList';
-      document.body.appendChild(alias);
+
+      datalist2 = document.createElement('datalist');
+      datalist2.id = 'teamDataList';
+      document.body.appendChild(datalist2);
     }
+
     const sorted = [...new Set(allTeams)].sort((a, b) => a.localeCompare(b));
-    const options = sorted.map(t => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
-    
-    // Isi kedua datalist jika ada
-    document.querySelectorAll('#teamDatalist, #teamDataList').forEach(dl => {
-      dl.innerHTML = options;
-    });
-    
+    const optionsHtml = sorted.map(t => `<option value="${t}">`).join('');
+
+    if (datalist) {
+      datalist.innerHTML = optionsHtml;
+    }
+    if (datalist2) {
+      datalist2.innerHTML = optionsHtml;
+    }
+
     console.log(`✅ Datalist terisi dengan ${sorted.length} tim unik`);
   }
 
@@ -270,7 +295,7 @@ App.FeatureLoaders.parlay = function(userRef) {
     else if (avgGoals>=th.o35){goalLine="3.5";recType="Over";}
     else {goalLine="2.5";recType="Over";}
 
-    // FIX: tambah = yang hilang
+    // FIX: dulu di sini bug - alt" bukan alt =
     let alt="";
     if (avgGoals>=2.9&&avgGoals<3.2) alt = " (atau Over 3/3.5)";
     else if (avgGoals>=2.4&&avgGoals<2.7) alt = " (atau Over 2/2.5)";
@@ -416,38 +441,50 @@ App.FeatureLoaders.parlay = function(userRef) {
         under: document.getElementById(`U${i}`)?.value||"0",
       });
     }
-    
-    // FIX: Fallback jika Firebase deactivated
-    if (!firebaseAvailable || !App.Service || !App.Auth.currentUser) {
-      saveLocal(data);
+
+    // FIX: simpan lokal dulu agar tidak hilang saat Firebase deactivated
+    saveLocal(data);
+
+    if (!firebaseAvailable) {
       firebaseParlayData=data; temporaryMatchData=null;
-      alert("✅ Data tersimpan lokal (Firebase tidak tersedia)");
+      alert("✅ Data tersimpan lokal (Firebase deactivated - mode offline)");
       return;
     }
 
-    App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
-      .then(()=>{ 
-        firebaseParlayData=data; temporaryMatchData=null; 
-        saveLocal(data); // backup lokal juga
-        alert("✅ Data tersimpan!"); 
-      })
-      .catch(e=>{
-        if (handleFirebaseError(e) || e.message.includes('deactivated') || e.message.includes('PERMISSION_DENIED')) {
-          saveLocal(data);
+    try {
+      if (!App.Service || !App.Auth || !App.Auth.currentUser) {
+        firebaseParlayData=data; temporaryMatchData=null;
+        alert("✅ Data tersimpan lokal (belum login)");
+        return;
+      }
+
+      App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
+        .then(()=>{
           firebaseParlayData=data; temporaryMatchData=null;
-          alert("✅ Data tersimpan lokal (Firebase deactivated, pakai mode offline)");
-        } else {
-          alert(" Gagal: "+e.message);
-        }
-      });
+          alert("✅ Data tersimpan!");
+        })
+        .catch(e=>{
+          if (handleFirebaseError(e)) {
+            firebaseParlayData=data; temporaryMatchData=null;
+            alert("✅ Data tersimpan lokal (Firebase deactivated)");
+          } else {
+            alert(" Gagal: "+e.message);
+          }
+        });
+    } catch (err) {
+      handleFirebaseError(err);
+      firebaseParlayData=data; temporaryMatchData=null;
+      alert("✅ Data tersimpan lokal (Error Firebase)");
+    }
   }
 
   function hapusData() {
     if (!confirm("Hapus semua data Fitur 1?")) return;
-    
-    if (!firebaseAvailable || !App.Service || !App.Auth.currentUser) {
+
+    removeLocal();
+
+    if (!firebaseAvailable || !App.Service || !App.Auth || !App.Auth.currentUser) {
       jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
-      removeLocal();
       renderPertandingan();
       renderTeamDatalist();
       const h=document.getElementById("hasil"); if(h) h.innerHTML="";
@@ -459,7 +496,6 @@ App.FeatureLoaders.parlay = function(userRef) {
     App.Service.removeData('users/'+App.Auth.currentUser.uid+'/parlayData')
       .then(()=>{
         jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
-        removeLocal();
         renderPertandingan();
         renderTeamDatalist();
         const h=document.getElementById("hasil"); if(h) h.innerHTML="";
@@ -467,8 +503,6 @@ App.FeatureLoaders.parlay = function(userRef) {
         alert("✅ Data dihapus.");
       })
       .catch(e=>{
-        // Tetap hapus lokal walau firebase gagal
-        removeLocal();
         jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
         renderPertandingan();
         renderTeamDatalist();
@@ -476,9 +510,8 @@ App.FeatureLoaders.parlay = function(userRef) {
       });
   }
 
-  // === LOAD DATA DARI FIREBASE - DENGAN FALLBACK ===
+  // === LOAD DATA DARI FIREBASE DENGAN FALLBACK ===
   function initLoad() {
-    // Coba load lokal dulu untuk kecepatan
     const local = loadLocal();
     if (local.length > 0) {
       firebaseParlayData = local;
@@ -486,7 +519,7 @@ App.FeatureLoaders.parlay = function(userRef) {
     }
 
     try {
-      if (App.Service && App.Service.loadData && App.Auth.currentUser) {
+      if (App.Service && App.Service.loadData && App.Auth && App.Auth.currentUser) {
         App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
           if (Array.isArray(val) && val.length > 0) {
             firebaseParlayData = val;
@@ -500,7 +533,7 @@ App.FeatureLoaders.parlay = function(userRef) {
         renderPertandingan();
         renderTeamDatalist();
       }
-    } catch(err) {
+    } catch (err) {
       console.warn('Firebase load gagal, pakai data lokal', err);
       firebaseAvailable = false;
       renderPertandingan();
@@ -508,22 +541,15 @@ App.FeatureLoaders.parlay = function(userRef) {
     }
   }
 
-  // === INIT: Load teams dulu, baru render - URUTAN DIPERBAIKI ===
+  // === INIT: Load teams dulu, baru render - URUTAN SUDAH DIPERBAIKI ===
+  // FIX: dulu kamu panggil renderTeamDatalist() sebelum renderHTML() -> error #teamDataList
   loadTeams().then(() => {
-    renderHTML(); // renderHTML sekarang memanggil renderPertandingan + renderTeamDatalist di dalamnya
+    renderHTML();
     initLoad();
   }).catch(() => {
     renderHTML();
     initLoad();
   });
-
-  // Global error handler untuk Firebase deactivated (dari logger.ts)
-  window.addEventListener('error', (e) => {
-    if (e.message && e.message.includes('deactivated')) {
-      firebaseAvailable = false;
-      console.warn('Firebase deactivated detected via window.error');
-    }
-  });
 };
 
-console.log("✅ Feature 1: Parlay loaded (FIXED)");
+console.log("✅ Feature 1: Parlay loaded - FIX 400+ baris");
