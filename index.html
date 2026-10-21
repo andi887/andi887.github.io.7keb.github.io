@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sistem Analisis Olahraga — Realtime Firebase</title>
   
-  <!-- Firebase SDK (Wajib dimuat sebelum script.js) -->
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   
-  <!-- Menghubungkan file CSS eksternal -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- PERBAIKI: Path CSS sesuai folder -->
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header>
@@ -51,11 +51,11 @@
       <h3>Odds Parlay dari Bandar</h3>
       <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00" placeholder="Contoh: 30.00">
       <p style="font-size:0.9em; color:#555;">Masukkan odds akumulasi jika ingin analisis parlay (opsional)</p>
-      <button class="secondary" onclick="tampilkanOddsAdil()">👁️ Lihat Odds Adil per Laga</button>
+      <button class="secondary" onclick="tampilkanOddsAdil()">️ Lihat Odds Adil per Laga</button>
     </div>
     <button onclick="hitungParlay()">Hitung Analisis, Parlay & EV</button>
     <button onclick="simpanDataPertandingan()">💾 Simpan Data Pertandingan</button>
-    <button onclick="hapusDataParlay()" style="background:#d32f2f;">🗑️ Hapus Data Parlay</button>
+    <button onclick="hapusDataParlay()" style="background:#d32f2f;">️ Hapus Data Parlay</button>
     <div id="fairOddsContainer" class="fair-odds-table">
       <h3>⚖️ Perbandingan: Odds Bandar vs Odds Adil</h3>
       <table>
@@ -106,7 +106,7 @@
         <button id="deleteAll" class="btn-danger">Hapus Semua Data</button>
       </div>
       <div class="sketsa-bil-section">
-        <h2>🧮 Kalkulator BEP + EV Parlay</h2>
+        <h2> Kalkulator BEP + EV Parlay</h2>
         <p><small>Odds: format desimal (contoh: 1.85)<br>Probabilitas: dalam % (contoh: 60) atau desimal (contoh: 0.6)</small></p>
         <div id="inputs">
           <div class="input-row">
@@ -155,7 +155,7 @@
     <p>▶️ Koleksi alat bantu: konversi odds, kalkulator ROI, panduan threshold, dll.</p>
   </div>
 
-  <!-- Menghubungkan file JavaScript eksternal -->
-  <script src="script.js"></script>
+  <!-- PERBAIKI: Path JS sesuai folder -->
+  <script src="js/script.js"></script>
 </body>
 </html>
