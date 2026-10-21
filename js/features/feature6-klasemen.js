@@ -1,48 +1,44 @@
 /**
  * feature6-klasemen.js
- * Fitur 6: Klasemen Live via football-data.org
- * Token API disimpan di Firestore user settings (Opsi B)
+ * Fitur 6: Klasemen Manual
+ * Data tim dibaca dari data/teams.json, input klasemen dilakukan manual oleh user
+ * Data disimpan per-user di Firebase Realtime Database
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
 
 App.FeatureLoaders.klasemen = function(userRef) {
   const container = document.getElementById('klasemen');
-  let apiToken = '';
+  let teamsData = {};
+  let currentLeague = '';
+  let currentTeams = [];
+  const uid = App.Auth.currentUser.uid;
 
   // === RENDER UI ===
   container.innerHTML = `
-    <h2>6. Klasemen Live (football-data.org)</h2>
+    <h2>6. Klasemen Manual</h2>
     
     <div class="sketsa-bil-section">
-      <h3>⚙️ Pengaturan API Token</h3>
-      <p class="hint">Masukkan token API football-data.org Anda. Token akan disimpan aman di akun Firebase Anda.</p>
-      <div class="input-group">
-        <input type="password" id="apiTokenInput" placeholder="Masukkan API Token (contoh: a1b2c3d4...)">
-        <button class="btn-primary" id="btnSaveToken">💾 Simpan Token</button>
-      </div>
-    </div>
-
-    <div class="sketsa-bil-section">
-      <h3>🏆 Pilih Liga (Free Tier Supported)</h3>
+      <h3>🏆 Pilih Liga</h3>
+      <p class="hint">Pilih liga untuk membuat/edit klasemen. Data tim akan dimuat dari database.</p>
       <div class="input-group">
         <select id="leagueSelect" class="team-input" style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;">
-          <option value="PL">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League (Inggris)</option>
-          <option value="PD">🇪🇸 La Liga (Spanyol)</option>
-          <option value="SA">🇮🇹 Serie A (Italia)</option>
-          <option value="BL1">🇩🇪 Bundesliga (Jerman)</option>
-          <option value="FL1">🇫🇷 Ligue 1 (Prancis)</option>
-          <option value="DED">🇳🇱 Eredivisie (Belanda)</option>
-          <option value="PPL">🇵🇹 Primeira Liga (Portugal)</option>
-          <option value="BSA">🇧🇷 Brasileirão Série A (Brasil)</option>
+          <option value="">-- Pilih Liga --</option>
         </select>
-        <button class="btn-success" id="btnLoadStandings">🔄 Tarik Data Klasemen</button>
+        <button class="btn-primary" id="btnLoadTemplate">📋 Muat Template Tim</button>
       </div>
     </div>
 
-    <div id="standingsResult" class="sketsa-bil-section" style="display:none;">
-      <h3 id="leagueTitle">Klasemen</h3>
+    <div id="klasemenEditor" class="sketsa-bil-section" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h3 id="editorTitle">Edit Klasemen</h3>
+        <div>
+          <button class="btn-success" id="btnSaveKlasemen">💾 Simpan Klasemen</button>
+          <button class="btn-danger" id="btnClearKlasemen">🗑️ Reset</button>
+        </div>
+      </div>
+      <p class="hint">Isi data pertandingan. Kolom <strong>SG</strong> (Selisih Gol) dihitung otomatis. Klik header <strong>Poin</strong> untuk sort.</p>
       <div style="overflow-x:auto;">
-        <table id="standingsTable">
+        <table id="klasemenTable">
           <thead>
             <tr>
               <th>#</th>
@@ -55,119 +51,215 @@ App.FeatureLoaders.klasemen = function(userRef) {
               <th>GK</th>
               <th>SG</th>
               <th>Poin</th>
+              <th>Aksi</th>
             </tr>
           </thead>
-          <tbody id="standingsBody"></tbody>
+          <tbody id="klasemenBody"></tbody>
         </table>
       </div>
-      <p class="hint" id="lastUpdated" style="margin-top:10px;"></p>
+      <p class="hint" id="lastSaved" style="margin-top:10px;"></p>
     </div>
   `;
 
-  // === BIND EVENTS ===
-  document.getElementById('btnSaveToken').onclick = saveToken;
-  document.getElementById('btnLoadStandings').onclick = loadStandings;
-
-  // === LOAD TOKEN DARI FIRESTORE ===
-  App.Service.loadDataOnce('users/' + App.Auth.currentUser.uid + '/settings').then(settings => {
-    if (settings && settings.apiToken) {
-      apiToken = settings.apiToken;
-      document.getElementById('apiTokenInput').value = apiToken;
-    }
-  });
-
-  // === FUNGSI SIMPAN TOKEN ===
-  function saveToken() {
-    const token = document.getElementById('apiTokenInput').value.trim();
-    if (!token) {
-      alert('⚠️ Token tidak boleh kosong!');
-      return;
-    }
-    App.Service.saveData('users/' + App.Auth.currentUser.uid + '/settings', { apiToken: token })
-      .then(() => {
-        apiToken = token;
-        alert('✅ Token berhasil disimpan dengan aman!');
-      })
-      .catch(err => alert('❌ Gagal menyimpan: ' + err.message));
-  }
-
-  // === FUNGSI TARIK DATA DARI API ===
-  async function loadStandings() {
-    if (!apiToken) {
-      alert('⚠️ Harap simpan API Token terlebih dahulu!');
-      return;
-    }
-
-    const leagueCode = document.getElementById('leagueSelect').value;
-    const btn = document.getElementById('btnLoadStandings');
-    const resultDiv = document.getElementById('standingsResult');
-    
-    // Loading state
-    btn.disabled = true;
-    btn.textContent = '⏳ Memuat data...';
-    resultDiv.style.display = 'none';
-
+  // === LOAD TEAMS.JSON ===
+  async function loadTeams() {
     try {
-      const response = await fetch(`https://api.football-data.org/v4/competitions/${leagueCode}/standings`, {
-        headers: {
-          'X-Auth-Token': apiToken
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 403) throw new Error('Token tidak valid, kedaluwarsa, atau belum diaktifkan.');
-        if (response.status === 429) throw new Error('Batas permintaan (10 req/menit) tercapai. Tunggu 1 menit.');
-        throw new Error(`Gagal mengambil data: HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      renderTable(data);
-      resultDiv.style.display = 'block';
-
-    } catch (error) {
-      alert('❌ Error: ' + error.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '🔄 Tarik Data Klasemen';
+      const response = await fetch('data/teams.json');
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      teamsData = await response.json();
+      populateLeagueDropdown();
+      console.log(`✅ Loaded ${Object.keys(teamsData).length} liga dari teams.json`);
+    } catch (err) {
+      console.error('❌ Gagal memuat teams.json:', err.message);
+      alert('Gagal memuat data liga. Periksa file data/teams.json');
     }
   }
 
-  // === FUNGSI RENDER TABEL ===
-  function renderTable(data) {
-    const leagueName = data.competition.name;
-    const season = data.season.startDate.split('-')[0];
-    document.getElementById('leagueTitle').textContent = `🏆 Klasemen ${leagueName} ${season}/${season.slice(-2)}`;
-    
-    // Ambil klasemen total (bukan home/away)
-    const totalStandings = data.standings.find(s => s.type === 'TOTAL');
-    if (!totalStandings) {
-      alert('Data klasemen tidak tersedia untuk liga ini saat ini.');
+  // === POPULATE DROPDOWN LIGA ===
+  function populateLeagueDropdown() {
+    const select = document.getElementById('leagueSelect');
+    const leagues = Object.keys(teamsData).sort();
+    leagues.forEach(league => {
+      const option = document.createElement('option');
+      option.value = league;
+      option.textContent = `${league} (${teamsData[league].length} tim)`;
+      select.appendChild(option);
+    });
+  }
+
+  // === BIND EVENTS ===
+  document.getElementById('btnLoadTemplate').onclick = loadTemplate;
+  document.getElementById('btnSaveKlasemen').onclick = saveKlasemen;
+  document.getElementById('btnClearKlasemen').onclick = clearKlasemen;
+
+  // === LOAD TEMPLATE (Generate baris kosong untuk semua tim di liga) ===
+  async function loadTemplate() {
+    const league = document.getElementById('leagueSelect').value;
+    if (!league) {
+      alert('⚠️ Pilih liga terlebih dahulu!');
       return;
     }
 
-    const standings = totalStandings.table;
-    const tbody = document.getElementById('standingsBody');
+    currentLeague = league;
+    const teams = teamsData[league] || [];
+    
+    // Tanya user: mulai baru atau load data tersimpan?
+    const savedData = await App.Service.loadDataOnce(`users/${uid}/klasemen/${sanitizeKey(league)}`);
+    
+    if (savedData && savedData.teams && savedData.teams.length > 0) {
+      const useSaved = confirm(`Ada data klasemen tersimpan untuk ${league}.\n\nOK = Gunakan data tersimpan\nCancel = Mulai template baru (kosong)`);
+      if (useSaved) {
+        currentTeams = savedData.teams;
+        document.getElementById('lastSaved').textContent = `📅 Terakhir disimpan: ${new Date(savedData.lastUpdated).toLocaleString('id-ID')}`;
+      } else {
+        currentTeams = teams.map(name => createEmptyTeam(name));
+      }
+    } else {
+      currentTeams = teams.map(name => createEmptyTeam(name));
+    }
+
+    document.getElementById('editorTitle').textContent = `🏆 Edit Klasemen: ${league}`;
+    document.getElementById('klasemenEditor').style.display = 'block';
+    renderTable();
+  }
+
+  // === CREATE EMPTY TEAM OBJECT ===
+  function createEmptyTeam(name) {
+    return {
+      name: name,
+      played: 0,
+      won: 0,
+      draw: 0,
+      lost: 0,
+      gf: 0,
+      ga: 0,
+      points: 0
+    };
+  }
+
+  // === RENDER TABEL ===
+  function renderTable() {
+    const tbody = document.getElementById('klasemenBody');
     tbody.innerHTML = '';
 
-    standings.forEach(row => {
+    // Sort berdasarkan poin (desc), lalu selisih gol (desc)
+    currentTeams.sort((a, b) => {
+      const gdA = a.gf - a.ga;
+      const gdB = b.gf - b.ga;
+      if (b.points !== a.points) return b.points - a.points;
+      return gdB - gdA;
+    });
+
+    currentTeams.forEach((team, idx) => {
+      const gd = team.gf - team.ga;
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>${row.position}</strong></td>
-        <td style="text-align:left; font-weight:500;">${row.team.name}</td>
-        <td>${row.playedGames}</td>
-        <td>${row.won}</td>
-        <td>${row.draw}</td>
-        <td>${row.lost}</td>
-        <td>${row.goalsFor}</td>
-        <td>${row.goalsAgainst}</td>
-        <td>${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}</td>
-        <td><strong>${row.points}</strong></td>
+        <td><strong>${idx + 1}</strong></td>
+        <td style="text-align:left; font-weight:500;">${team.name}</td>
+        <td><input type="number" min="0" value="${team.played}" data-idx="${idx}" data-field="played" class="stat-input"></td>
+        <td><input type="number" min="0" value="${team.won}" data-idx="${idx}" data-field="won" class="stat-input"></td>
+        <td><input type="number" min="0" value="${team.draw}" data-idx="${idx}" data-field="draw" class="stat-input"></td>
+        <td><input type="number" min="0" value="${team.lost}" data-idx="${idx}" data-field="lost" class="stat-input"></td>
+        <td><input type="number" min="0" value="${team.gf}" data-idx="${idx}" data-field="gf" class="stat-input"></td>
+        <td><input type="number" min="0" value="${team.ga}" data-idx="${idx}" data-field="ga" class="stat-input"></td>
+        <td class="gd-cell">${gd > 0 ? '+' : ''}${gd}</td>
+        <td><input type="number" min="0" value="${team.points}" data-idx="${idx}" data-field="points" class="stat-input points-input"></td>
+        <td><button class="btn-small btn-danger" data-remove="${idx}"></button></td>
       `;
       tbody.appendChild(tr);
     });
 
-    document.getElementById('lastUpdated').textContent = `🕒 Terakhir diperbarui: ${new Date().toLocaleString('id-ID')}`;
+    // Bind input events
+    tbody.querySelectorAll('.stat-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        const field = e.target.dataset.field;
+        currentTeams[idx][field] = parseInt(e.target.value) || 0;
+        // Auto-update SG display
+        const gd = currentTeams[idx].gf - currentTeams[idx].ga;
+        const gdCell = e.target.closest('tr').querySelector('.gd-cell');
+        if (gdCell) gdCell.textContent = (gd > 0 ? '+' : '') + gd;
+      });
+    });
+
+    // Bind remove buttons
+    tbody.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.remove);
+        if (confirm(`Hapus ${currentTeams[idx].name} dari klasemen?`)) {
+          currentTeams.splice(idx, 1);
+          renderTable();
+        }
+      };
+    });
+
+    applyZoneHighlighting();
   }
+
+  // === HIGHLIGHT ZONA ===
+  function applyZoneHighlighting() {
+    const rows = document.querySelectorAll('#klasemenBody tr');
+    rows.forEach((row, idx) => {
+      row.classList.remove('zone-ucl', 'zone-uel', 'zone-conference', 'zone-relegation');
+      const total = rows.length;
+      if (total >= 4 && idx < 4) row.classList.add('zone-ucl');
+      else if (total >= 5 && idx === 4) row.classList.add('zone-uel');
+      else if (total >= 6 && idx === 5) row.classList.add('zone-conference');
+      else if (total >= 3 && idx >= total - 3) row.classList.add('zone-relegation');
+    });
+  }
+
+  // === SIMPAN KE FIREBASE ===
+  async function saveKlasemen() {
+    if (!currentLeague || currentTeams.length === 0) {
+      alert('⚠️ Tidak ada data untuk disimpan!');
+      return;
+    }
+
+    const btn = document.getElementById('btnSaveKlasemen');
+    btn.disabled = true;
+    btn.textContent = '⏳ Menyimpan...';
+
+    try {
+      const data = {
+        league: currentLeague,
+        lastUpdated: Date.now(),
+        teams: currentTeams
+      };
+      await App.Service.saveData(`users/${uid}/klasemen/${sanitizeKey(currentLeague)}`, data);
+      document.getElementById('lastSaved').textContent = `✅ Tersimpan: ${new Date().toLocaleString('id-ID')}`;
+      alert('✅ Klasemen berhasil disimpan!');
+    } catch (err) {
+      alert('❌ Gagal menyimpan: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = ' Simpan Klasemen';
+    }
+  }
+
+  // === RESET/HAPUS ===
+  async function clearKlasemen() {
+    if (!currentLeague) return;
+    if (!confirm(`Hapus semua data klasemen untuk ${currentLeague}?`)) return;
+
+    try {
+      await App.Service.removeData(`users/${uid}/klasemen/${sanitizeKey(currentLeague)}`);
+      currentTeams = [];
+      document.getElementById('klasemenEditor').style.display = 'none';
+      document.getElementById('lastSaved').textContent = '';
+      alert('✅ Klasemen dihapus.');
+    } catch (err) {
+      alert('❌ Gagal menghapus: ' + err.message);
+    }
+  }
+
+  // === SANITIZE KEY (untuk Firebase path) ===
+  function sanitizeKey(str) {
+    return str.replace(/[\.\#\$\[\]\/]/g, '_');
+  }
+
+  // === INIT ===
+  loadTeams();
 };
 
-console.log("✅ Feature 6: Klasemen loaded");
+console.log("✅ Feature 6: Klasemen Manual loaded");
