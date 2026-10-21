@@ -1,0 +1,348 @@
+/**
+ * feature1-parlay.js
+ * Fitur 1: Analisis Parlay + Over/Under
+ * MANDIRI — tidak bergantung pada fitur lain
+ */
+
+App.FeatureLoaders.parlay = function(userRef) {
+  const container = document.getElementById('parlay');
+  const MAX_MATCHES = 10;
+  let jumlahPertandingan = 1;
+  let firebaseParlayData = [];
+  let temporaryMatchData = null;
+
+  // === RENDER HTML FITUR 1 ===
+  function renderHTML() {
+    container.innerHTML = `
+      <h2>1. Analisis Parlay + Rekomendasi Over/Under</h2>
+      <div id="matches"></div>
+      <div class="match-controls">
+        <button class="btn-secondary" id="btnTambah">➕ Tambah Pertandingan</button>
+        <button class="btn-secondary" id="btnHapus">➖ Hapus Pertandingan</button>
+      </div>
+      <div class="parlay-input">
+        <h3>Odds Parlay dari Bandar</h3>
+        <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00">
+        <p class="hint">Masukkan odds akumulasi (opsional)</p>
+        <button class="btn-secondary" id="btnLihatAdil">️ Lihat Odds Adil</button>
+      </div>
+      <div class="action-buttons">
+        <button class="btn-primary" id="btnHitung">Hitung Analisis, Parlay & EV</button>
+        <button class="btn-success" id="btnSimpan">💾 Simpan Data</button>
+        <button class="btn-danger" id="btnHapusData">🗑️ Hapus Data</button>
+      </div>
+      <div id="fairOddsContainer" class="fair-odds-table" style="display:none;">
+        <h3>⚖️ Odds Bandar vs Odds Adil</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Pertandingan</th><th>Outcome</th>
+              <th class="odds-bandar">Bandar</th>
+              <th class="odds-adil">Adil</th>
+              <th class="margin-col">Margin</th>
+            </tr>
+          </thead>
+          <tbody id="fairOddsTableBody"></tbody>
+        </table>
+      </div>
+      <div id="hasil"></div>
+    `;
+
+    bindEvents();
+    renderPertandingan();
+  }
+
+  function bindEvents() {
+    document.getElementById('btnTambah').onclick = tambahPertandingan;
+    document.getElementById('btnHapus').onclick = hapusPertandingan;
+    document.getElementById('btnHitung').onclick = hitungParlay;
+    document.getElementById('btnSimpan').onclick = simpanData;
+    document.getElementById('btnHapusData').onclick = hapusData;
+    document.getElementById('btnLihatAdil').onclick = tampilkanOddsAdil;
+  }
+
+  // === LOGIKA PARLAY ===
+  function simpanInputSementara() {
+    temporaryMatchData = [];
+    for (let i = 1; i <= jumlahPertandingan; i++) {
+      temporaryMatchData.push({
+        matchDate: i === 1 ? (document.getElementById("date1")?.value || "") : "",
+        teamA: document.getElementById(`teamA${i}`)?.value.trim() || "Tim A",
+        teamB: document.getElementById(`teamB${i}`)?.value.trim() || "Tim B",
+        oddsA: document.getElementById(`A${i}`)?.value || "0",
+        oddsD: document.getElementById(`D${i}`)?.value || "0",
+        oddsB: document.getElementById(`B${i}`)?.value || "0",
+        over: document.getElementById(`O${i}`)?.value || "0",
+        under: document.getElementById(`U${i}`)?.value || "0",
+      });
+    }
+  }
+
+  function renderPertandingan() {
+    const matchesDiv = document.getElementById("matches");
+    if (!matchesDiv) return;
+    let html = "";
+    for (let i = 1; i <= jumlahPertandingan; i++) {
+      let data = {};
+      if (temporaryMatchData?.[i-1]) data = temporaryMatchData[i-1];
+      else if (firebaseParlayData?.[i-1]) data = firebaseParlayData[i-1];
+
+      let dateHtml = i === 1 
+        ? `<div><label>Tanggal:<br><input type="date" id="date1" value="${data.matchDate||''}" style="width:120px;text-align:center;"></label></div>` 
+        : "";
+
+      html += `
+        <div class="match">
+          <h3>Pertandingan ${i}</h3>
+          <div class="match-row">
+            ${dateHtml}
+            <div><label>Tim A:<br><input type="text" id="teamA${i}" value="${data.teamA||'Tim A'}" style="width:100px;text-align:center;"></label></div>
+            <div><label>Odds A:<br><input type="number" id="A${i}" value="${data.oddsA||'0'}" step="0.01" min="0"></label></div>
+            <div><label>Draw:<br><input type="number" id="D${i}" value="${data.oddsD||'0'}" step="0.01" min="0"></label></div>
+            <div><label>Tim B:<br><input type="text" id="teamB${i}" value="${data.teamB||'Tim B'}" style="width:100px;text-align:center;"></label></div>
+            <div><label>Odds B:<br><input type="number" id="B${i}" value="${data.oddsB||'0'}" step="0.01" min="0"></label></div>
+            <div><label>Over:<br><input type="number" id="O${i}" value="${data.over||'0'}" step="0.01" min="0"></label></div>
+            <div><label>Under:<br><input type="number" id="U${i}" value="${data.under||'0'}" step="0.01" min="0"></label></div>
+          </div>
+          <div id="recOU${i}" class="rec-container"></div>
+        </div>`;
+    }
+    matchesDiv.innerHTML = html;
+
+    for (let i = 1; i <= jumlahPertandingan; i++) {
+      ["A","D","B"].forEach(t => {
+        const el = document.getElementById(`${t}${i}`);
+        if (el) {
+          const handler = () => {
+            updateOverUnder(i);
+            const fc = document.getElementById("fairOddsContainer");
+            if (fc) fc.style.display = "none";
+            simpanInputSementara();
+          };
+          el.removeEventListener("input", handler);
+          el.addEventListener("input", handler);
+        }
+      });
+      updateOverUnder(i);
+    }
+  }
+
+  function tambahPertandingan() {
+    if (jumlahPertandingan < MAX_MATCHES) {
+      simpanInputSementara();
+      jumlahPertandingan++;
+      renderPertandingan();
+    } else alert(`Maksimal ${MAX_MATCHES} pertandingan.`);
+  }
+
+  function hapusPertandingan() {
+    if (jumlahPertandingan > 1) {
+      simpanInputSementara();
+      jumlahPertandingan--;
+      renderPertandingan();
+    }
+  }
+
+  function updateOverUnder(idx) {
+    const a = parseFloat(document.getElementById(`A${idx}`)?.value);
+    const d = parseFloat(document.getElementById(`D${idx}`)?.value);
+    const b = parseFloat(document.getElementById(`B${idx}`)?.value);
+    const oEl = document.getElementById(`O${idx}`);
+    const uEl = document.getElementById(`U${idx}`);
+    const recEl = document.getElementById(`recOU${idx}`);
+
+    if (isNaN(a)||isNaN(d)||isNaN(b)||a<=1||d<=1||b<=1) {
+      if(oEl) oEl.value="0"; if(uEl) uEl.value="0";
+      if(recEl) recEl.innerHTML="";
+      return;
+    }
+    const pA=1/a, pD=1/d, pB=1/b, total=pA+pD+pB;
+    const probA=pA/total, probD=pD/total, probB=pB/total;
+    let avgGoals;
+    if (probD>=0.35) avgGoals=1.8;
+    else if (probD>=0.25) avgGoals=2.3;
+    else if (Math.abs(probA-probB)>=0.3) avgGoals=3.1;
+    else avgGoals=2.6;
+
+    const th = {u15:2.0, u25:2.5, o25:2.7, o35:3.2};
+    let goalLine, recType;
+    if (avgGoals<th.u15){goalLine="1.5";recType="Under";}
+    else if (avgGoals<th.u25){goalLine="2.5";recType="Under";}
+    else if (avgGoals<th.o25){goalLine="2.5";recType="Over";}
+    else if (avgGoals>=th.o35){goalLine="3.5";recType="Over";}
+    else {goalLine="2.5";recType="Over";}
+
+    let alt="";
+    if (avgGoals>=2.9&&avgGoals<3.2) alt=" (atau Over 3/3.5)";
+    else if (avgGoals>=2.4&&avgGoals<2.7) alt=" (atau Over 2/2.5)";
+    else if (avgGoals>=2.0&&avgGoals<2.3) alt=" (atau Under 2/2.5)";
+
+    let probUnder, probOver;
+    if (recType==="Under") {
+      probUnder = 0.52+(th.u25-avgGoals)*0.15;
+      probUnder = Math.min(0.85,Math.max(0.45,probUnder));
+      probOver = 1-probUnder;
+    } else {
+      probOver = goalLine==="3.5" 
+        ? 0.55+(avgGoals-th.o35)*0.12 
+        : 0.52+(avgGoals-th.u25)*0.12;
+      probOver = Math.min(0.85,Math.max(0.45,probOver));
+      probUnder = 1-probOver;
+    }
+    const margin = 1.05;
+    if(oEl) oEl.value=(1/probOver*margin).toFixed(2);
+    if(uEl) uEl.value=(1/probUnder*margin).toFixed(2);
+    if(recEl) recEl.innerHTML=`<span class="recommendation">Rekomendasi: <strong>${recType} ${goalLine}${alt}</strong></span>`;
+  }
+
+  function hitungOddsAdil(a,d,b) {
+    const pA=1/a, pD=1/d, pB=1/b, total=pA+pD+pB;
+    return {
+      oddsAdilA: total/pA, oddsAdilD: total/pD, oddsAdilB: total/pB,
+      overround: total
+    };
+  }
+
+  function analisisPertandingan(a,d,b) {
+    if (a<=1||d<=1||b<=1) throw new Error("Odds harus > 1");
+    const pA=1/a, pD=1/d, pB=1/b, total=pA+pD+pB;
+    const probA=pA/total, probD=pD/total, probB=pB/total;
+    const selisih = probA-probB;
+    let label="";
+    if (probD*100>=30) label="Berisiko Seri";
+    else if (probA>=0.55&&selisih>=0.2) label="Tim A Favorit Kuat";
+    else if (probB>=0.55&&selisih<=-0.2) label="Tim B Favorit Kuat";
+    else if (probA>probB) label="Tim A Diunggulkan";
+    else if (probB>probA) label="Tim B Diunggulkan";
+    else label="Seimbang";
+    let pilihan="Tim A", probPilihan=probA;
+    if (probB>=probA&&probB>=probD){pilihan="Tim B";probPilihan=probB;}
+    else if (probD>=probA&&probD>=probB){pilihan="Draw";probPilihan=probD;}
+    return {
+      persentase:{timA:(probA*100).toFixed(2)+"%",draw:(probD*100).toFixed(2)+"%",timB:(probB*100).toFixed(2)+"%"},
+      label, pilihan, probPilihan
+    };
+  }
+
+  function hitungParlay() {
+    const pertandingan = [];
+    try {
+      for (let i=1;i<=jumlahPertandingan;i++) {
+        const a=parseFloat(document.getElementById(`A${i}`).value);
+        const d=parseFloat(document.getElementById(`D${i}`).value);
+        const b=parseFloat(document.getElementById(`B${i}`).value);
+        if (isNaN(a)||isNaN(d)||isNaN(b)) throw new Error(`Pertandingan ${i} tidak valid`);
+        pertandingan.push({oddsA:a,oddsDraw:d,oddsB:b});
+      }
+      const hasilList = pertandingan.map(p=>analisisPertandingan(p.oddsA,p.oddsDraw,p.oddsB));
+      let html="";
+      hasilList.forEach((h,idx)=>{
+        const nA=document.getElementById(`teamA${idx+1}`)?.value.trim()||"Tim A";
+        const nB=document.getElementById(`teamB${idx+1}`)?.value.trim()||"Tim B";
+        html+=`<div class="match"><h3>${nA} vs ${nB}</h3>
+          <p><strong>Prob:</strong> ${nA}: ${h.persentase.timA} | Draw: ${h.persentase.draw} | ${nB}: ${h.persentase.timB}</p>
+          <p><strong>Analisis:</strong> <span class="label">${h.label.replace(/Tim A/g,nA).replace(/Tim B/g,nB)}</span></p>
+          <p><strong>Pilihan:</strong> ${h.pilihan==="Tim A"?nA:h.pilihan==="Tim B"?nB:"Draw"} (${(h.probPilihan*100).toFixed(2)}%)</p>
+        </div>`;
+      });
+      if (jumlahPertandingan===1) {
+        html+=`<div class="parlay-result"><h2>ℹ️ Analisis Tunggal</h2><p>Hanya 1 pertandingan.</p></div>`;
+      } else {
+        const probGab = hasilList.reduce((a,h)=>a*h.probPilihan,1);
+        const oddsTeo = 1/probGab;
+        let risiko="Rendah", rc="risk-low";
+        if (probGab<0.05){risiko="Sangat Tinggi";rc="risk-high";}
+        else if (probGab<0.1){risiko="Tinggi";rc="risk-high";}
+        else if (probGab<0.2){risiko="Sedang";rc="risk-medium";}
+        const oddsBandar = parseFloat(document.getElementById("oddsBandarInput").value);
+        if (isNaN(oddsBandar)||oddsBandar<=1) {
+          html+=`<div class="parlay-result"><p style="color:red;">⚠️ Odds bandar tidak valid.</p></div>`;
+        } else {
+          const ev = probGab*oddsBandar-1;
+          const rek = ev>0?"✅ LAYAK (Positive EV)":"❌ TIDAK LAYAK (Negative EV)";
+          html+=`<div class="parlay-result">
+            <h2>🎯 Analisis Parlay & EV</h2>
+            <p><strong>Odds Teoretis:</strong> ${oddsTeo.toFixed(2)} | <strong>Odds Bandar:</strong> ${oddsBandar.toFixed(2)}</p>
+            <p><strong>Probabilitas Menang:</strong> ${(probGab*100).toFixed(2)}%</p>
+            <p><strong>Risiko:</strong> <span class="${rc}">${risiko}</span></p>
+            <p><strong>EV:</strong> <span class="${ev>0?'ev-positive':'ev-negative'}">${(ev*100).toFixed(2)}%</span></p>
+            <p><strong>Rekomendasi:</strong> ${rek}</p>
+          </div>`;
+        }
+      }
+      document.getElementById("hasil").innerHTML = html;
+    } catch(e) {
+      document.getElementById("hasil").innerHTML=`<p style="color:red;">Error: ${e.message}</p>`;
+    }
+  }
+
+  function tampilkanOddsAdil() {
+    const inputs=[];
+    try {
+      for (let i=1;i<=jumlahPertandingan;i++) {
+        const a=parseFloat(document.getElementById(`A${i}`).value);
+        const d=parseFloat(document.getElementById(`D${i}`).value);
+        const b=parseFloat(document.getElementById(`B${i}`).value);
+        const o=parseFloat(document.getElementById(`O${i}`).value);
+        const u=parseFloat(document.getElementById(`U${i}`).value);
+        if (isNaN(a)||isNaN(d)||isNaN(b)||a<=1||d<=1||b<=1) throw new Error("Odds 1X2 harus > 1");
+        if (isNaN(o)||isNaN(u)) throw new Error("Over/Under belum terisi");
+        inputs.push({a,d,b,o,u});
+      }
+      let html="";
+      inputs.forEach((inp,idx)=>{
+        const adil=hitungOddsAdil(inp.a,inp.d,inp.b);
+        [{name:"Tim A",b:inp.a,a:adil.oddsAdilA},{name:"Draw",b:inp.d,a:adil.oddsAdilD},{name:"Tim B",b:inp.b,a:adil.oddsAdilB}]
+        .forEach(o=>{
+          const m=(((o.a-o.b)/o.b)*100).toFixed(1);
+          html+=`<tr><td>${idx+1}</td><td>${o.name}</td><td class="odds-bandar">${o.b.toFixed(2)}</td><td class="odds-adil">${o.a.toFixed(2)}</td><td class="margin-col">${m}%</td></tr>`;
+        });
+      });
+      document.getElementById("fairOddsTableBody").innerHTML=html;
+      document.getElementById("fairOddsContainer").style.display="block";
+    } catch(e) { alert("Error: "+e.message); }
+  }
+
+  function simpanData() {
+    const data=[];
+    for (let i=1;i<=jumlahPertandingan;i++) {
+      data.push({
+        matchDate: i===1?(document.getElementById("date1")?.value||""):"",
+        teamA: document.getElementById(`teamA${i}`)?.value.trim()||"Tim A",
+        teamB: document.getElementById(`teamB${i}`)?.value.trim()||"Tim B",
+        oddsA: document.getElementById(`A${i}`)?.value||"0",
+        oddsD: document.getElementById(`D${i}`)?.value||"0",
+        oddsB: document.getElementById(`B${i}`)?.value||"0",
+        over: document.getElementById(`O${i}`)?.value||"0",
+        under: document.getElementById(`U${i}`)?.value||"0",
+      });
+    }
+    App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
+      .then(()=>{ firebaseParlayData=data; temporaryMatchData=null; alert("✅ Data tersimpan!"); })
+      .catch(e=>alert("❌ Gagal: "+e.message));
+  }
+
+  function hapusData() {
+    if (!confirm("Hapus semua data Fitur 1?")) return;
+    App.Service.removeData('users/'+App.Auth.currentUser.uid+'/parlayData')
+      .then(()=>{
+        jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
+        renderPertandingan();
+        const h=document.getElementById("hasil"); if(h) h.innerHTML="";
+        const f=document.getElementById("fairOddsContainer"); if(f) f.style.display="none";
+        alert("✅ Data dihapus.");
+      });
+  }
+
+  // === LOAD DATA DARI FIREBASE ===
+  App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
+    firebaseParlayData = Array.isArray(val)?val:[];
+    jumlahPertandingan = Math.max(1, firebaseParlayData.length);
+    renderPertandingan();
+  });
+
+  // Jalankan render
+  renderHTML();
+};
+
+console.log("✅ Feature 1: Parlay loaded");
