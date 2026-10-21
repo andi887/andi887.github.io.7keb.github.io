@@ -1,26 +1,26 @@
 /**
  * dashboard.js
- * Mengatur navigasi, card grid, dan memuat fitur yang aktif.
- * Tidak ada logika fitur di sini — hanya routing.
+ * Hanya routing & navigasi.
+ * Tidak ada inisialisasi App, tidak ada DOMContentLoaded.
  */
 
 App.Dashboard = {
   currentFeature: 'parlay',
   initializedFeatures: new Set(),
+  uid: null,
+  userRef: null,
 
   init(uid) {
     this.uid = uid;
     this.userRef = App.Service.getUserRef(uid);
     this.setupNavigation();
-    // Load fitur default
     this.loadFeature('parlay');
   },
 
   setupNavigation() {
     document.querySelectorAll('#mainNav button').forEach(btn => {
       btn.addEventListener('click', () => {
-        const feature = btn.dataset.feature;
-        this.switchFeature(feature);
+        this.switchFeature(btn.dataset.feature);
       });
     });
   },
@@ -28,11 +28,13 @@ App.Dashboard = {
   switchFeature(featureName) {
     // Update tombol aktif
     document.querySelectorAll('#mainNav button').forEach(b => b.classList.remove('active'));
-    document.querySelector(`#mainNav button[data-feature="${featureName}"]`)?.classList.add('active');
+    const activeBtn = document.querySelector(`#mainNav button[data-feature="${featureName}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
 
     // Update section aktif
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.getElementById(featureName)?.classList.add('active');
+    const target = document.getElementById(featureName);
+    if (target) target.classList.add('active');
 
     this.currentFeature = featureName;
     this.loadFeature(featureName);
@@ -48,17 +50,9 @@ App.Dashboard = {
       this.initializedFeatures.add(featureName);
       console.log(`✅ Feature "${featureName}" loaded`);
     } else {
-      console.warn(`⚠️ Feature loader "${featureName}" tidak ditemukan`);
+      console.warn(`⚠️ Feature loader "${featureName}" tidak ditemukan. Pastikan file fitur sudah di-load.`);
     }
   }
 };
-
-// Registry fitur — setiap fitur mendaftarkan dirinya sendiri
-App.FeatureLoaders = {};
-
-// Inisialisasi Auth saat DOM siap
-document.addEventListener('DOMContentLoaded', () => {
-  App.Auth.init();
-});
 
 console.log("✅ Dashboard loaded");
