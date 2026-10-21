@@ -2,190 +2,160 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Rumah Utama</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-
-    body {
-      background: #f5f5f5;
-      padding: 16px;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    h1 {
-      text-align: center;
-      margin-bottom: 24px;
-      color: #333;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: bold;
-    }
-
-    select, button {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 16px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 16px;
-    }
-
-    button {
-      background: #4CAF50;
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    button:hover {
-      background: #45a049;
-    }
-
-    #resetBtn {
-      background: #f44336;
-    }
-
-    #resetBtn:hover {
-      background: #d32f2f;
-    }
-
-    #childHouses {
-      display: none;
-      margin-top: 24px;
-    }
-
-    #childHouses h2 {
-      margin-bottom: 16px;
-      color: #333;
-    }
-
-    .house-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 12px;
-    }
-
-    .house-btn {
-      padding: 12px;
-      background: #2196F3;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      text-align: center;
-      cursor: pointer;
-      text-decoration: none;
-      display: block;
-    }
-
-    .house-btn:hover {
-      background: #1976D2;
-    }
-
-    @media (max-width: 480px) {
-      .house-grid {
-        grid-template-columns: 1fr; /* Model huruf N: vertikal di HP */
-      }
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistem Analisis Olahraga — Realtime Firebase</title>
+  
+  <!-- Firebase SDK (Wajib dimuat sebelum script.js) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  
+  <!-- Menghubungkan file CSS eksternal -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>Rumah Utama</h1>
+  <header>
+    <h1>🎯 Sistem Analisis Olahraga — Realtime</h1>
+    <div id="authPanel">
+      <span id="userEmail"></span>
+      <button id="btnLogout" style="display:none;">Logout</button>
+      <button id="btnLogin">Login</button>
+    </div>
+  </header>
 
-    <label for="period">Pilih Periode / Market</label>
-    <select id="period">
-      <option value="">-- Pilih Market --</option>
-      <option value="cambodia">Cambodia</option>
-      <option value="sidney">Sidney</option>
-      <option value="china">China</option>
-      <option value="japan">Japan</option>
-      <option value="taiwan">Taiwan</option>
-      <option value="hk">HK</option>
-    </select>
+  <div id="loginForm">
+    <h3>Login Email</h3>
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="password" placeholder="Password" />
+    <button onclick="login()">Login</button>
+    <p><small>Belum punya akun? Daftar di Firebase Console → Authentication</small></p>
+  </div>
 
-    <button id="savePeriod">Simpan Periode Aktif</button>
-    <button id="resetBtn">Beranda</button>
+  <nav id="mainNav" style="display:none;">
+    <button data-section="parlay" class="active">1. Analisis Parlay + O/U</button>
+    <button data-section="favorit">2. Kumpulan Tim Favorit</button>
+    <button data-section="sketsa">3. Sketsa Bil</button>
+    <button data-section="diskusi">4. Room Diskusi</button>
+    <button data-section="serba">5. Serba Serbi</button>
+  </nav>
 
-    <div id="childHouses">
-      <h2>Anak Rumah</h2>
-      <div class="house-grid" id="houseList"></div>
+  <!-- Parlay -->
+  <div id="parlay" class="section active">
+    <h2>1. Analisis Parlay + Rekomendasi Over/Under (Dapat Disesuaikan)</h2>
+    <div id="matches"></div>
+    <div class="match-controls">
+      <button class="secondary" onclick="tambahPertandingan()">➕ Tambah Pertandingan</button>
+      <button class="secondary" onclick="hapusPertandingan()">➖ Hapus Pertandingan</button>
+    </div>
+    <div class="parlay-input">
+      <h3>Odds Parlay dari Bandar</h3>
+      <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00" placeholder="Contoh: 30.00">
+      <p style="font-size:0.9em; color:#555;">Masukkan odds akumulasi jika ingin analisis parlay (opsional)</p>
+      <button class="secondary" onclick="tampilkanOddsAdil()">👁️ Lihat Odds Adil per Laga</button>
+    </div>
+    <button onclick="hitungParlay()">Hitung Analisis, Parlay & EV</button>
+    <button onclick="simpanDataPertandingan()">💾 Simpan Data Pertandingan</button>
+    <button onclick="hapusDataParlay()" style="background:#d32f2f;">🗑️ Hapus Data Parlay</button>
+    <div id="fairOddsContainer" class="fair-odds-table">
+      <h3>⚖️ Perbandingan: Odds Bandar vs Odds Adil</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Pertandingan</th>
+            <th>Outcome</th>
+            <th class="odds-bandar">Odds Bandar</th>
+            <th class="odds-adil">Odds Adil</th>
+            <th class="margin-col">Margin<br>(Bandar → Adil)</th>
+          </tr>
+        </thead>
+        <tbody id="fairOddsTableBody"></tbody>
+      </table>
+    </div>
+    <div id="hasil"></div>
+  </div>
+
+  <!-- Favorit -->
+  <div id="favorit" class="section">
+    <h2>2. Kumpulan Tim Favorit</h2>
+    <div>
+      <input type="text" id="inputTim" placeholder="Contoh: Manchester United">
+      <button onclick="tambahTimFavorit()">➕ Tambah Tim</button>
+    </div>
+    <ul id="daftarTim"></ul>
+  </div>
+
+  <!-- Sketsa Bil -->
+  <div id="sketsa" class="section">
+    <h2>3. Sketsa Bil</h2>
+    <div class="sketsa-bil">
+      <div class="sketsa-bil-section">
+        <h2>📝 Fitur Catatan</h2>
+        <div id="notes">
+          <label for="note1">1.</label><input type="text" id="note1" placeholder="Contoh: juve" />
+          <label for="note2">2.</label><input type="text" id="note2" placeholder="Contoh: inter" />
+          <label for="note3">3.</label><input type="text" id="note3" placeholder="Contoh: milan" />
+          <label for="note4">4.</label><input type="text" id="note4" placeholder="Contoh: roma" />
+          <label for="note5">5.</label><input type="text" id="note5" placeholder="Contoh: napoli" />
+        </div>
+        <button id="saveNotes" class="btn-primary">Simpan Catatan</button>
+      </div>
+      <div class="sketsa-bil-section">
+        <h2>📊 Fitur Collection (9 Tabel)</h2>
+        <div id="tablesContainer"></div>
+        <button id="saveTables" class="btn-primary">Simpan Semua Tabel</button>
+        <button id="deleteAll" class="btn-danger">Hapus Semua Data</button>
+      </div>
+      <div class="sketsa-bil-section">
+        <h2>🧮 Kalkulator BEP + EV Parlay</h2>
+        <p><small>Odds: format desimal (contoh: 1.85)<br>Probabilitas: dalam % (contoh: 60) atau desimal (contoh: 0.6)</small></p>
+        <div id="inputs">
+          <div class="input-row">
+            <input type="text" class="odds" placeholder="Odds (ex: 1.85)" />
+            <input type="text" class="prob" placeholder="Prob % atau desimal (ex: 60 atau 0.6)" />
+          </div>
+        </div>
+        <button onclick="tambahBaris()" class="btn-primary">+ Tambah Leg</button>
+        <button onclick="hitungEV()" class="btn-success">Hitung BEP & EV</button>
+        <div id="hasil-ev">
+          <p><strong>Odds Parlay:</strong> <span id="oddsTotal"></span></p>
+          <p><strong>BEP:</strong> <span id="bep"></span></p>
+          <p><strong>Fair Probability:</strong> <span id="fairProb"></span></p>
+          <p><strong>EV:</strong> <span id="ev"></span></p>
+          <p><strong>Rekomendasi:</strong> <span id="rekomendasi"></span></p>
+        </div>
+      </div>
+      <div class="sketsa-bil-section">
+        <h2>📁 Riwayat Perhitungan EV</h2>
+        <div id="historyList"></div>
+        <button id="clearHistory" class="btn-danger" style="margin-top: 10px;">Hapus Semua Riwayat</button>
+      </div>
     </div>
   </div>
 
-  <script>
-    const markets = ['cambodia', 'sidney', 'china', 'japan', 'taiwan', 'hk'];
-    const houseNames = {
-      1: 'data statistik',
-      2: 'dasar',
-      3: 'filter',
-      4: 'jalur',
-      5: 'book',
-      6: 'keluarga kecil',
-      7: 'kunci',
-      8: 'perkakas',
-      10: 'obat',
-      11: 'lemari',
-      12: 'kasur',
-      13: 'ranjang',
-      14: 'tv',
-      15: 'kursi',
-      16: 'meja',
-      17: 'ruang makan',
-      18: 'ruangtamu'
-    };
+  <!-- Diskusi -->
+  <div id="diskusi" class="section">
+    <h2>4. Room Diskusi — Ringkasan Rekomendasi Otomatis</h2>
+    <div id="rekomendasi-win" class="rekom-box">
+      <h3>✅ Tim untuk Dipilih (Win)</h3>
+      <ul id="list-win"></ul>
+    </div>
+    <div id="rekomendasi-over" class="rekom-box">
+      <h3>📈 Pertandingan Over</h3>
+      <ul id="list-over"></ul>
+    </div>
+    <div id="rekomendasi-under" class="rekom-box">
+      <h3>📉 Pertandingan Under</h3>
+      <ul id="list-under"></ul>
+    </div>
+    <p><em>Rekomendasi hanya ditampilkan jika probabilitas ≥67% (Win) atau ≥60% (Over/Under).</em></p>
+  </div>
 
-    let activeMarket = null;
+  <div id="serba" class="section">
+    <h2>5. Serba Serbi</h2>
+    <p>▶️ Koleksi alat bantu: konversi odds, kalkulator ROI, panduan threshold, dll.</p>
+  </div>
 
-    document.getElementById('savePeriod').addEventListener('click', () => {
-      const selected = document.getElementById('period').value;
-      if (!selected) {
-        alert('Silakan pilih market terlebih dahulu.');
-        return;
-      }
-      activeMarket = selected;
-      renderChildHouses();
-    });
-
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      activeMarket = null;
-      document.getElementById('childHouses').style.display = 'none';
-      document.getElementById('period').value = '';
-    });
-
-    function renderChildHouses() {
-      const container = document.getElementById('houseList');
-      container.innerHTML = '';
-
-      for (const num in houseNames) {
-        const a = document.createElement('a');
-        a.href = `rumah${num}.html?market=${activeMarket}`;
-        a.className = 'house-btn';
-        a.textContent = `Rumah${num}\n(${houseNames[num]})`;
-        a.style.whiteSpace = 'pre-line';
-        container.appendChild(a);
-      }
-
-      document.getElementById('childHouses').style.display = 'block';
-    }
-  </script>
+  <!-- Menghubungkan file JavaScript eksternal -->
+  <script src="script.js"></script>
 </body>
 </html>
