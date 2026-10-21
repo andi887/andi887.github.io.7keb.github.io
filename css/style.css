@@ -1,0 +1,57 @@
+/* === GAYA UMUM === */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f9ff; color: #333; line-height: 1.6; }
+header { text-align: center; padding: 20px; background: #1a73e8; color: white; position: relative; }
+#authPanel { position: absolute; top: 10px; right: 10px; font-size: 0.9em; }
+#authPanel button { margin-left: 8px; padding: 4px 10px; font-size: 0.9em; }
+nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 12px; background: #e3f2fd; border-bottom: 1px solid #ccc; }
+nav button { padding: 10px 16px; background: #ffffff; border: 1px solid #1a73e8; border-radius: 6px; cursor: pointer; font-weight: bold; color: #1a73e8; }
+nav button.active { background: #1a73e8; color: white; }
+.section { display: none; padding: 20px; max-width: 950px; margin: 20px auto; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.section.active { display: block; }
+h2 { margin-bottom: 15px; color: #1a73e8; }
+
+/* === LOGIN FORM === */
+#loginForm { display: none; padding: 20px; text-align: center; background: #fff; border-radius: 10px; max-width: 400px; margin: 20px auto; }
+#loginForm input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; }
+#loginForm button { padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+/* === GAYA PARLAY === */
+#parlay .match, #parlay .fair-odds-table, #parlay .parlay-input {
+  background: white; padding: 15px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+#parlay .parlay-input { text-align: center; background: #fff8e1; }
+#parlay .parlay-result { background: #e8f0fe; padding: 20px; margin-top: 20px; border-radius: 10px; text-align: center; font-weight: bold; }
+#parlay input { width: 80px; padding: 6px; margin: 0 5px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
+#parlay button { display: block; margin: 15px auto; padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+#parlay button:hover { background: #0d5bb8; }
+#parlay button.secondary { background: #388e3c; font-size: 14px; width: auto; display: inline-block; margin: 5px; }
+#parlay .label { display: inline-block; margin-top: 8px; padding: 4px 10px; background: #e0f7fa; border-radius: 4px; font-weight: bold; color: #006064; }
+#parlay .recommendation { display: inline-block; margin-top: 10px; padding: 6px 12px; border-radius: 6px; font-weight: bold; background: #f3e5f5; color: #4a148c; font-size: 16px; }
+#parlay table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+#parlay th, #parlay td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+#parlay th { background-color: #f0f8ff; }
+#parlay .odds-bandar { background-color: #ffebee; }
+#parlay .odds-adil { background-color: #e8f5e8; }
+#parlay .margin-col { background-color: #fff3e0; }
+#parlay .fair-odds-table { display: none; }
+#parlay .match-controls { text-align: center; margin: 10px 0; }
+#parlay .match-controls button { display: inline-block; margin: 0 5px; }
+#parlay #fairOddsContainer table { display: block; overflow-x: auto; white-space: nowrap; }
+#parlay .risk-high { color: #c62828; }
+#parlay .risk-medium { color: #f57c00; }
+#parlay .risk-low { color: #2e7d32; }
+#parlay .ev-positive { color: #2e7d32; font-weight: bold; }
+#parlay .ev-negative { color: #c62828; font-weight: bold; }
+
+/* Tambahan style untuk elemen lain yang ada di HTML (Sketsa Bil, dll) */
+.btn-primary { background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 5px; }
+.btn-danger { background: #d32f2f; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 5px; }
+.btn-success { background: #388e3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 5px; }
+.sketsa-bil-section { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+.input-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.input-row input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+.rekom-box { background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #388e3c; }
+.rekom-box ul { margin-left: 20px; margin-top: 10px; }
+.table-container { margin-bottom: 15px; background: white; padding: 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.table-label { font-size: 0.9em; color: #666; margin-bottom: 5px; font-style: italic; }
