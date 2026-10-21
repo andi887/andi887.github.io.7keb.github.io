@@ -1,11 +1,9 @@
-**
+/**
  * feature1-parlay.js
  * Fitur 1: Analisis Parlay + Over/Under
  * MANDIRI — dengan autocomplete tim dari data/teams.json
- * SEMUA LOGIKA ASLI DIPERTAHANKAN - VERSI FIX 400+ BARIS
- * FIX: #teamDatalist, alt= , Firebase deactivated
+ * SEMUA LOGIKA ASLI DIPERTAHANKAN
  */
-window.App = window.App || {};
 App.FeatureLoaders = App.FeatureLoaders || {};
 
 App.FeatureLoaders.parlay = function(userRef) {
@@ -16,44 +14,6 @@ App.FeatureLoaders.parlay = function(userRef) {
   let temporaryMatchData = null;
   let teamsData = {};
   let allTeams = [];
-
-  // === FIX: LOCAL STORAGE FALLBACK UNTUK FIREBASE DEACTIVATED ===
-  const LOCAL_KEY = 'parlayData_local';
-  let firebaseAvailable = true;
-
-  function saveLocal(data) {
-    try {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.warn('Gagal save local', e);
-    }
-  }
-
-  function loadLocal() {
-    try {
-      const raw = localStorage.getItem(LOCAL_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function removeLocal() {
-    try {
-      localStorage.removeItem(LOCAL_KEY);
-    } catch (e) {}
-  }
-
-  function handleFirebaseError(err) {
-    if (!err) return false;
-    const msg = (err.message || '').toLowerCase();
-    if (msg.includes('deactivated') || msg.includes('permission_denied') || msg.includes('unavailable')) {
-      firebaseAvailable = false;
-      console.warn('⚠ Firebase tidak tersedia, pakai mode offline:', err.message);
-      return true;
-    }
-    return false;
-  }
 
   // === LOAD TEAMS.JSON ===
   async function loadTeams() {
@@ -66,17 +26,6 @@ App.FeatureLoaders.parlay = function(userRef) {
       console.log('📋 Daftar liga:', Object.keys(teamsData));
     } catch (err) {
       console.error('❌ Gagal memuat teams.json:', err.message);
-      // FIX: coba path alternatif untuk Github Pages nested
-      try {
-        const response2 = await fetch('./data/teams.json');
-        if (response2.ok) {
-          teamsData = await response2.json();
-          allTeams = Object.values(teamsData).flat();
-          console.log(`✅ Loaded ${allTeams.length} teams dari ./data/teams.json (fallback)`);
-          console.log('📋 Daftar liga:', Object.keys(teamsData));
-          return;
-        }
-      } catch (e2) {}
       teamsData = {};
       allTeams = [];
     }
@@ -95,15 +44,15 @@ App.FeatureLoaders.parlay = function(userRef) {
         <h3>Odds Parlay dari Bandar</h3>
         <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00">
         <p class="hint">Masukkan odds akumulasi (opsional)</p>
-        <button class="btn-secondary" id="btnLihatAdil">👁 Lihat Odds Adil</button>
+        <button class="btn-secondary" id="btnLihatAdil">👁️ Lihat Odds Adil</button>
       </div>
       <div class="action-buttons">
         <button class="btn-primary" id="btnHitung">Hitung Analisis, Parlay & EV</button>
         <button class="btn-success" id="btnSimpan">💾 Simpan Data</button>
-        <button class="btn-danger" id="btnHapusData">🗑 Hapus Data</button>
+        <button class="btn-danger" id="btnHapusData">🗑️ Hapus Data</button>
       </div>
       <div id="fairOddsContainer" class="fair-odds-table" style="display:none;">
-        <h3>⚖ Odds Bandar vs Odds Adil</h3>
+        <h3>⚖️ Odds Bandar vs Odds Adil</h3>
         <table>
           <thead>
             <tr>
@@ -118,42 +67,21 @@ App.FeatureLoaders.parlay = function(userRef) {
       </div>
       <div id="hasil"></div>
       <datalist id="teamDatalist"></datalist>
-      <datalist id="teamDataList"></datalist>
     `;
 
     bindEvents();
     renderPertandingan();
-    // FIX: renderTeamDatalist dipanggil SETELAH renderHTML agar element ada
-    renderTeamDatalist();
   }
 
   // === RENDER DATALIST TIM ===
   function renderTeamDatalist() {
-    // FIX: support kedua ID untuk backward compatibility
-    let datalist = document.getElementById('teamDatalist');
-    let datalist2 = document.getElementById('teamDataList');
-
-    if (!datalist && !datalist2) {
-      console.warn('⚠ Element #teamDatalist tidak ditemukan, auto-create');
-      datalist = document.createElement('datalist');
-      datalist.id = 'teamDatalist';
-      document.body.appendChild(datalist);
-
-      datalist2 = document.createElement('datalist');
-      datalist2.id = 'teamDataList';
-      document.body.appendChild(datalist2);
+    const datalist = document.getElementById('teamDatalist');
+    if (!datalist) {
+      console.warn('⚠️ Element #teamDatalist tidak ditemukan');
+      return;
     }
-
     const sorted = [...new Set(allTeams)].sort((a, b) => a.localeCompare(b));
-    const optionsHtml = sorted.map(t => `<option value="${t}">`).join('');
-
-    if (datalist) {
-      datalist.innerHTML = optionsHtml;
-    }
-    if (datalist2) {
-      datalist2.innerHTML = optionsHtml;
-    }
-
+    datalist.innerHTML = sorted.map(t => `<option value="${t}">`).join('');
     console.log(`✅ Datalist terisi dengan ${sorted.length} tim unik`);
   }
 
@@ -295,11 +223,10 @@ App.FeatureLoaders.parlay = function(userRef) {
     else if (avgGoals>=th.o35){goalLine="3.5";recType="Over";}
     else {goalLine="2.5";recType="Over";}
 
-    // FIX: dulu di sini bug - alt" bukan alt =
     let alt="";
-    if (avgGoals>=2.9&&avgGoals<3.2) alt = " (atau Over 3/3.5)";
-    else if (avgGoals>=2.4&&avgGoals<2.7) alt = " (atau Over 2/2.5)";
-    else if (avgGoals>=2.0&&avgGoals<2.3) alt = " (atau Under 2/2.5)";
+    if (avgGoals>=2.9&&avgGoals<3.2) alt=" (atau Over 3/3.5)";
+    else if (avgGoals>=2.4&&avgGoals<2.7) alt=" (atau Over 2/2.5)";
+    else if (avgGoals>=2.0&&avgGoals<2.3) alt=" (atau Under 2/2.5)";
 
     let probUnder, probOver;
     if (recType==="Under") {
@@ -370,7 +297,7 @@ App.FeatureLoaders.parlay = function(userRef) {
         </div>`;
       });
       if (jumlahPertandingan===1) {
-        html+=`<div class="parlay-result"><h2> Analisis Tunggal</h2><p>Hanya 1 pertandingan.</p></div>`;
+        html+=`<div class="parlay-result"><h2>️ Analisis Tunggal</h2><p>Hanya 1 pertandingan.</p></div>`;
       } else {
         const probGab = hasilList.reduce((a,h)=>a*h.probPilihan,1);
         const oddsTeo = 1/probGab;
@@ -380,7 +307,7 @@ App.FeatureLoaders.parlay = function(userRef) {
         else if (probGab<0.2){risiko="Sedang";rc="risk-medium";}
         const oddsBandar = parseFloat(document.getElementById("oddsBandarInput").value);
         if (isNaN(oddsBandar)||oddsBandar<=1) {
-          html+=`<div class="parlay-result"><p style="color:red;">⚠ Odds bandar tidak valid.</p></div>`;
+          html+=`<div class="parlay-result"><p style="color:red;">⚠️ Odds bandar tidak valid.</p></div>`;
         } else {
           const ev = probGab*oddsBandar-1;
           const rek = ev>0?"✅ LAYAK (Positive EV)":"❌ TIDAK LAYAK (Negative EV)";
@@ -441,115 +368,35 @@ App.FeatureLoaders.parlay = function(userRef) {
         under: document.getElementById(`U${i}`)?.value||"0",
       });
     }
-
-    // FIX: simpan lokal dulu agar tidak hilang saat Firebase deactivated
-    saveLocal(data);
-
-    if (!firebaseAvailable) {
-      firebaseParlayData=data; temporaryMatchData=null;
-      alert("✅ Data tersimpan lokal (Firebase deactivated - mode offline)");
-      return;
-    }
-
-    try {
-      if (!App.Service || !App.Auth || !App.Auth.currentUser) {
-        firebaseParlayData=data; temporaryMatchData=null;
-        alert("✅ Data tersimpan lokal (belum login)");
-        return;
-      }
-
-      App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
-        .then(()=>{
-          firebaseParlayData=data; temporaryMatchData=null;
-          alert("✅ Data tersimpan!");
-        })
-        .catch(e=>{
-          if (handleFirebaseError(e)) {
-            firebaseParlayData=data; temporaryMatchData=null;
-            alert("✅ Data tersimpan lokal (Firebase deactivated)");
-          } else {
-            alert(" Gagal: "+e.message);
-          }
-        });
-    } catch (err) {
-      handleFirebaseError(err);
-      firebaseParlayData=data; temporaryMatchData=null;
-      alert("✅ Data tersimpan lokal (Error Firebase)");
-    }
+    App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
+      .then(()=>{ firebaseParlayData=data; temporaryMatchData=null; alert("✅ Data tersimpan!"); })
+      .catch(e=>alert(" Gagal: "+e.message));
   }
 
   function hapusData() {
     if (!confirm("Hapus semua data Fitur 1?")) return;
-
-    removeLocal();
-
-    if (!firebaseAvailable || !App.Service || !App.Auth || !App.Auth.currentUser) {
-      jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
-      renderPertandingan();
-      renderTeamDatalist();
-      const h=document.getElementById("hasil"); if(h) h.innerHTML="";
-      const f=document.getElementById("fairOddsContainer"); if(f) f.style.display="none";
-      alert("✅ Data lokal dihapus.");
-      return;
-    }
-
     App.Service.removeData('users/'+App.Auth.currentUser.uid+'/parlayData')
       .then(()=>{
         jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
         renderPertandingan();
-        renderTeamDatalist();
         const h=document.getElementById("hasil"); if(h) h.innerHTML="";
         const f=document.getElementById("fairOddsContainer"); if(f) f.style.display="none";
         alert("✅ Data dihapus.");
-      })
-      .catch(e=>{
-        jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
-        renderPertandingan();
-        renderTeamDatalist();
-        alert("✅ Data lokal dihapus (Firebase error: "+e.message+")");
       });
   }
 
-  // === LOAD DATA DARI FIREBASE DENGAN FALLBACK ===
-  function initLoad() {
-    const local = loadLocal();
-    if (local.length > 0) {
-      firebaseParlayData = local;
-      jumlahPertandingan = Math.max(1, local.length);
-    }
+  // === LOAD DATA DARI FIREBASE ===
+  App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
+    firebaseParlayData = Array.isArray(val)?val:[];
+    jumlahPertandingan = Math.max(1, firebaseParlayData.length);
+    renderPertandingan();
+  });
 
-    try {
-      if (App.Service && App.Service.loadData && App.Auth && App.Auth.currentUser) {
-        App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
-          if (Array.isArray(val) && val.length > 0) {
-            firebaseParlayData = val;
-            jumlahPertandingan = Math.max(1, val.length);
-            saveLocal(val);
-          }
-          renderPertandingan();
-          renderTeamDatalist();
-        });
-      } else {
-        renderPertandingan();
-        renderTeamDatalist();
-      }
-    } catch (err) {
-      console.warn('Firebase load gagal, pakai data lokal', err);
-      firebaseAvailable = false;
-      renderPertandingan();
-      renderTeamDatalist();
-    }
-  }
-
-  // === INIT: Load teams dulu, baru render - URUTAN SUDAH DIPERBAIKI ===
-  // FIX: dulu kamu panggil renderTeamDatalist() sebelum renderHTML() -> error #teamDataList
+  // === INIT: Load teams dulu, baru render ===
   loadTeams().then(() => {
+    renderTeamDatalist();
     renderHTML();
-    initLoad();
-  }).catch(() => {
-    renderHTML();
-    initLoad();
   });
 };
 
-console.log("✅ Feature 1: Parlay loaded - FIX 400+ baris");
+console.log("✅ Feature 1: Parlay loaded");
