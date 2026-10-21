@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sistem Analisis Olahraga — Realtime Firebase</title>
   
-  <!-- Firebase SDK -->
+  <!-- Firebase SDK (harus load pertama) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   
-  <!-- PERBAIKI: Path CSS sesuai folder -->
+  <!-- CSS -->
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <!-- HEADER -->
   <header>
     <h1>🎯 Sistem Analisis Olahraga — Realtime</h1>
     <div id="authPanel">
@@ -23,139 +24,41 @@
     </div>
   </header>
 
+  <!-- FORM AUTH -->
   <div id="loginForm">
-    <h3>Login Email</h3>
+    <h3 id="authTitle">Login Email</h3>
     <input type="email" id="email" placeholder="Email" />
-    <input type="password" id="password" placeholder="Password" />
-    <button onclick="login()">Login</button>
-    <p><small>Belum punya akun? Daftar di Firebase Console → Authentication</small></p>
+    <input type="password" id="password" placeholder="Password (min. 6 karakter)" />
+    <button id="btnAuthAction" onclick="App.Auth.handleAuth()">Login</button>
+    <p id="authToggle" class="auth-toggle">Belum punya akun? Klik di sini untuk Daftar</p>
   </div>
 
+  <!-- NAVIGASI DASHBOARD -->
   <nav id="mainNav" style="display:none;">
-    <button data-section="parlay" class="active">1. Analisis Parlay + O/U</button>
-    <button data-section="favorit">2. Kumpulan Tim Favorit</button>
-    <button data-section="sketsa">3. Sketsa Bil</button>
-    <button data-section="diskusi">4. Room Diskusi</button>
-    <button data-section="serba">5. Serba Serbi</button>
+    <button data-feature="parlay" class="active">1. Analisis Parlay + O/U</button>
+    <button data-feature="favorit">2. Kumpulan Tim Favorit</button>
+    <button data-feature="sketsa">3. Sketsa Bil</button>
+    <button data-feature="diskusi">4. Room Diskusi</button>
+    <button data-feature="serba">5. Serba Serbi</button>
   </nav>
 
-  <!-- Parlay -->
-  <div id="parlay" class="section active">
-    <h2>1. Analisis Parlay + Rekomendasi Over/Under (Dapat Disesuaikan)</h2>
-    <div id="matches"></div>
-    <div class="match-controls">
-      <button class="secondary" onclick="tambahPertandingan()">➕ Tambah Pertandingan</button>
-      <button class="secondary" onclick="hapusPertandingan()">➖ Hapus Pertandingan</button>
-    </div>
-    <div class="parlay-input">
-      <h3>Odds Parlay dari Bandar</h3>
-      <input type="number" id="oddsBandarInput" step="0.01" min="1.01" value="30.00" placeholder="Contoh: 30.00">
-      <p style="font-size:0.9em; color:#555;">Masukkan odds akumulasi jika ingin analisis parlay (opsional)</p>
-      <button class="secondary" onclick="tampilkanOddsAdil()">️ Lihat Odds Adil per Laga</button>
-    </div>
-    <button onclick="hitungParlay()">Hitung Analisis, Parlay & EV</button>
-    <button onclick="simpanDataPertandingan()">💾 Simpan Data Pertandingan</button>
-    <button onclick="hapusDataParlay()" style="background:#d32f2f;">️ Hapus Data Parlay</button>
-    <div id="fairOddsContainer" class="fair-odds-table">
-      <h3>⚖️ Perbandingan: Odds Bandar vs Odds Adil</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Pertandingan</th>
-            <th>Outcome</th>
-            <th class="odds-bandar">Odds Bandar</th>
-            <th class="odds-adil">Odds Adil</th>
-            <th class="margin-col">Margin<br>(Bandar → Adil)</th>
-          </tr>
-        </thead>
-        <tbody id="fairOddsTableBody"></tbody>
-      </table>
-    </div>
-    <div id="hasil"></div>
-  </div>
+  <!-- CONTAINER FITUR -->
+  <main id="featureContainer">
+    <div id="parlay" class="section active"></div>
+    <div id="favorit" class="section"></div>
+    <div id="sketsa" class="section"></div>
+    <div id="diskusi" class="section"></div>
+    <div id="serba" class="section"></div>
+  </main>
 
-  <!-- Favorit -->
-  <div id="favorit" class="section">
-    <h2>2. Kumpulan Tim Favorit</h2>
-    <div>
-      <input type="text" id="inputTim" placeholder="Contoh: Manchester United">
-      <button onclick="tambahTimFavorit()">➕ Tambah Tim</button>
-    </div>
-    <ul id="daftarTim"></ul>
-  </div>
-
-  <!-- Sketsa Bil -->
-  <div id="sketsa" class="section">
-    <h2>3. Sketsa Bil</h2>
-    <div class="sketsa-bil">
-      <div class="sketsa-bil-section">
-        <h2>📝 Fitur Catatan</h2>
-        <div id="notes">
-          <label for="note1">1.</label><input type="text" id="note1" placeholder="Contoh: juve" />
-          <label for="note2">2.</label><input type="text" id="note2" placeholder="Contoh: inter" />
-          <label for="note3">3.</label><input type="text" id="note3" placeholder="Contoh: milan" />
-          <label for="note4">4.</label><input type="text" id="note4" placeholder="Contoh: roma" />
-          <label for="note5">5.</label><input type="text" id="note5" placeholder="Contoh: napoli" />
-        </div>
-        <button id="saveNotes" class="btn-primary">Simpan Catatan</button>
-      </div>
-      <div class="sketsa-bil-section">
-        <h2>📊 Fitur Collection (9 Tabel)</h2>
-        <div id="tablesContainer"></div>
-        <button id="saveTables" class="btn-primary">Simpan Semua Tabel</button>
-        <button id="deleteAll" class="btn-danger">Hapus Semua Data</button>
-      </div>
-      <div class="sketsa-bil-section">
-        <h2> Kalkulator BEP + EV Parlay</h2>
-        <p><small>Odds: format desimal (contoh: 1.85)<br>Probabilitas: dalam % (contoh: 60) atau desimal (contoh: 0.6)</small></p>
-        <div id="inputs">
-          <div class="input-row">
-            <input type="text" class="odds" placeholder="Odds (ex: 1.85)" />
-            <input type="text" class="prob" placeholder="Prob % atau desimal (ex: 60 atau 0.6)" />
-          </div>
-        </div>
-        <button onclick="tambahBaris()" class="btn-primary">+ Tambah Leg</button>
-        <button onclick="hitungEV()" class="btn-success">Hitung BEP & EV</button>
-        <div id="hasil-ev">
-          <p><strong>Odds Parlay:</strong> <span id="oddsTotal"></span></p>
-          <p><strong>BEP:</strong> <span id="bep"></span></p>
-          <p><strong>Fair Probability:</strong> <span id="fairProb"></span></p>
-          <p><strong>EV:</strong> <span id="ev"></span></p>
-          <p><strong>Rekomendasi:</strong> <span id="rekomendasi"></span></p>
-        </div>
-      </div>
-      <div class="sketsa-bil-section">
-        <h2>📁 Riwayat Perhitungan EV</h2>
-        <div id="historyList"></div>
-        <button id="clearHistory" class="btn-danger" style="margin-top: 10px;">Hapus Semua Riwayat</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Diskusi -->
-  <div id="diskusi" class="section">
-    <h2>4. Room Diskusi — Ringkasan Rekomendasi Otomatis</h2>
-    <div id="rekomendasi-win" class="rekom-box">
-      <h3>✅ Tim untuk Dipilih (Win)</h3>
-      <ul id="list-win"></ul>
-    </div>
-    <div id="rekomendasi-over" class="rekom-box">
-      <h3>📈 Pertandingan Over</h3>
-      <ul id="list-over"></ul>
-    </div>
-    <div id="rekomendasi-under" class="rekom-box">
-      <h3>📉 Pertandingan Under</h3>
-      <ul id="list-under"></ul>
-    </div>
-    <p><em>Rekomendasi hanya ditampilkan jika probabilitas ≥67% (Win) atau ≥60% (Over/Under).</em></p>
-  </div>
-
-  <div id="serba" class="section">
-    <h2>5. Serba Serbi</h2>
-    <p>▶️ Koleksi alat bantu: konversi odds, kalkulator ROI, panduan threshold, dll.</p>
-  </div>
-
-  <!-- PERBAIKI: Path JS sesuai folder -->
-  <script src="js/script.js"></script>
+  <!-- SCRIPT: Urutan load PENTING -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-service.js"></script>
+  <script src="js/features/feature1-parlay.js"></script>
+  <script src="js/features/feature2-favorit.js"></script>
+  <script src="js/features/feature3-sketsa.js"></script>
+  <script src="js/features/feature4-diskusi.js"></script>
+  <script src="js/features/feature5-serba.js"></script>
+  <script src="js/dashboard.js"></script>
 </body>
 </html>
