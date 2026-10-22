@@ -1,6 +1,7 @@
 /**
  * feature3-sketsa.js
  * Fitur 3: Sketsa Bil (Catatan + Tabel + EV Calculator)
+ * PERBAIKAN: Tampilkan NAMA TIM di tabel, bukan angka
  */
 
 App.FeatureLoaders.sketsa = function(userRef) {
@@ -10,16 +11,25 @@ App.FeatureLoaders.sketsa = function(userRef) {
     <div class="sketsa-bil">
       <div class="sketsa-bil-section">
         <h3>📝 Catatan</h3>
+        <p class="hint">Isi nama tim di setiap nomor. Nomor ini akan otomatis muncul di tabel sebagai nama tim.</p>
         <div id="notes">
-          ${[1,2,3,4,5].map(i=>`<label>${i}.</label><input type="text" id="note${i}" placeholder="Catatan ${i}">`).join('')}
+          ${[1,2,3,4,5].map(i=>`
+            <div class="note-row">
+              <label class="note-label">${i}.</label>
+              <input type="text" id="note${i}" placeholder="Nama tim ${i}" class="note-input">
+            </div>
+          `).join('')}
         </div>
-        <button class="btn-primary" id="saveNotes">Simpan Catatan</button>
+        <button class="btn-primary" id="saveNotes">💾 Simpan Catatan</button>
+        <span id="notesStatus" class="status-text"></span>
       </div>
       <div class="sketsa-bil-section">
         <h3>📊 Collection (9 Tabel)</h3>
+        <p class="hint">Baris 2 & 3 otomatis menampilkan nama tim dari catatan di atas.</p>
         <div id="tablesContainer"></div>
         <button class="btn-primary" id="saveTables">Simpan Tabel</button>
         <button class="btn-danger" id="deleteAll">Hapus Semua Data</button>
+        <span id="tablesStatus" class="status-text"></span>
       </div>
       <div class="sketsa-bil-section">
         <h3>🧮 Kalkulator BEP + EV</h3>
@@ -47,7 +57,11 @@ App.FeatureLoaders.sketsa = function(userRef) {
     const notes = {};
     [1,2,3,4,5].forEach(i=>notes[i]=document.getElementById(`note${i}`).value.trim());
     App.Service.saveData('users/'+App.Auth.currentUser.uid+'/notes', notes)
-      .then(()=>renderTables());
+      .then(()=>{
+        document.getElementById('notesStatus').textContent = '✅ Tersimpan!';
+        setTimeout(() => document.getElementById('notesStatus').textContent = '', 2000);
+        renderTables();
+      });
   };
 
   App.Service.loadData('users/'+App.Auth.currentUser.uid+'/notes', val=>{
@@ -56,6 +70,8 @@ App.FeatureLoaders.sketsa = function(userRef) {
       const el = document.getElementById(`note${i}`);
       if(el) el.value = notes[i]||'';
     });
+    // Setelah notes ter-load, render tabel
+    renderTables();
   });
 
   // === TABEL ===
@@ -90,13 +106,34 @@ App.FeatureLoaders.sketsa = function(userRef) {
             for (let c=0;c<2;c++){
               const cell = document.createElement('td');
               if (r===0){
+                // Baris 1: input manual (judul kolom)
                 const inp = document.createElement('input');
                 inp.type='text'; inp.value=base[r][c]||'';
                 inp.dataset.table=i; inp.dataset.row=r; inp.dataset.col=c;
+                inp.className = 'table-header-input';
+                inp.placeholder = c===0 ? 'Kolom kiri' : 'Kolom kanan';
                 cell.appendChild(inp);
               } else {
-                cell.textContent = r===1?base[r][c]:base[r][c];
-                if (c===1){cell.style.backgroundColor='#f9f9f9';cell.style.fontWeight='bold';}
+                // Baris 2 & 3
+                if (c === 0) {
+                  // === KOLOM KIRI: TAMPILKAN NAMA TIM ===
+                  const noteNum = base[r][c]; // angka seperti 3, 5, 2, 4
+                  const teamName = notesMap[noteNum];
+                  
+                  if (teamName && teamName.trim() !== '') {
+                    // Catatan sudah diisi → tampilkan nama tim
+                    cell.innerHTML = `<span class="team-name-display">${teamName}</span>`;
+                    cell.title = `Referensi: Catatan #${noteNum}`;
+                  } else {
+                    // Catatan belum diisi → tampilkan placeholder
+                    cell.innerHTML = `<span class="team-name-empty" title="Isi Catatan #${noteNum} di atas">️ Tim #${noteNum}</span>`;
+                  }
+                } else {
+                  // === KOLOM KANAN: tampilkan status (win/remis) ===
+                  cell.textContent = base[r][c];
+                  cell.style.fontWeight = 'bold';
+                  cell.className = `status-${base[r][c]}`;
+                }
               }
               row.appendChild(cell);
             }
@@ -117,7 +154,10 @@ App.FeatureLoaders.sketsa = function(userRef) {
       data[parseInt(inp.dataset.table)][0][parseInt(inp.dataset.col)] = inp.value.trim();
     });
     App.Service.saveData('users/'+App.Auth.currentUser.uid+'/tables', data)
-      .then(()=>alert("✅ Tabel tersimpan!"));
+      .then(()=>{
+        document.getElementById('tablesStatus').textContent = '✅ Tersimpan!';
+        setTimeout(() => document.getElementById('tablesStatus').textContent = '', 2000);
+      });
   };
 
   document.getElementById('deleteAll').onclick = () => {
