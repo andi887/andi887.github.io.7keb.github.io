@@ -21,7 +21,7 @@ firebase.initializeApp(FIREBASE_CONFIG);
 window.FirebaseApp = {
   app: firebase.app(),
   auth: firebase.auth(),
-  db: firebase.database()
+  db: firebase.firestore()
 };
 
-console.log("✅ Firebase Config loaded");
+console.log("✅ Firebase Config loaded (dengan Firestore)");
