@@ -1,6 +1,6 @@
 /**
  * feature2-favorit.js
- * Fitur 2: Kumpulan Tim Favorit
+ * Fitur 2: Kumpulan Tim Favorit (dengan nama liga)
  */
 
 App.FeatureLoaders.favorit = function(userRef) {
@@ -12,6 +12,7 @@ App.FeatureLoaders.favorit = function(userRef) {
     <h2>2. Kumpulan Tim Favorit</h2>
     <div class="input-group">
       <input type="text" id="inputTim" placeholder="Contoh: Manchester United">
+      <input type="text" id="inputLiga" placeholder="Contoh: Premier League">
       <button class="btn-primary" id="btnTambahTim">➕ Tambah Tim</button>
     </div>
     <ul id="daftarTim" class="tim-list"></ul>
@@ -24,7 +25,7 @@ App.FeatureLoaders.favorit = function(userRef) {
       const li = document.createElement('li');
       li.className = 'tim-item';
       li.innerHTML = `
-        <span class="tim-name">${tim}</span>
+        <span class="tim-name">${tim.nama} <small style="color:#666">(${tim.liga})</small></span>
         <div class="tim-actions">
           <button class="btn-small" data-act="edit" data-idx="${idx}">✏️ Edit</button>
           <button class="btn-small btn-danger" data-act="hapus" data-idx="${idx}">🗑️ Hapus</button>
@@ -32,33 +33,46 @@ App.FeatureLoaders.favorit = function(userRef) {
       ul.appendChild(li);
     });
 
-    ul.querySelectorAll('button[data-act="edit"]').forEach(b=>{
-      b.onclick = ()=>{
-        document.getElementById('inputTim').value = daftarTim[b.dataset.idx];
+    ul.querySelectorAll('button[data-act="edit"]').forEach(b => {
+      b.onclick = () => {
+        const t = daftarTim[b.dataset.idx];
+        document.getElementById('inputTim').value = t.nama;
+        document.getElementById('inputLiga').value = t.liga;
         sedangMengedit = parseInt(b.dataset.idx);
       };
     });
-    ul.querySelectorAll('button[data-act="hapus"]').forEach(b=>{
-      b.onclick = ()=>hapusTim(parseInt(b.dataset.idx));
+    ul.querySelectorAll('button[data-act="hapus"]').forEach(b => {
+      b.onclick = () => hapusTim(parseInt(b.dataset.idx));
     });
   }
 
   function simpanKeFirebase() {
-    App.Service.saveData('users/'+App.Auth.currentUser.uid+'/timFavorit', daftarTim);
+    App.Service.saveData('users/' + App.Auth.currentUser.uid + '/timFavorit', daftarTim);
   }
 
   function tambahTim() {
-    const input = document.getElementById('inputTim');
-    const nama = input.value.trim();
+    const inputTim = document.getElementById('inputTim');
+    const inputLiga = document.getElementById('inputLiga');
+    const nama = inputTim.value.trim();
+    const liga = inputLiga.value.trim();
+
     if (!nama) { alert("Nama tim tidak boleh kosong!"); return; }
-    if (daftarTim.includes(nama) && sedangMengedit===null) { alert('Tim sudah ada!'); return; }
+    if (!liga) { alert("Nama liga tidak boleh kosong!"); return; }
+
+    const sudahAda = daftarTim.findIndex(t => t.nama.toLowerCase() === nama.toLowerCase());
+
     if (sedangMengedit !== null) {
-      daftarTim[sedangMengedit] = nama;
+      // Mode edit: update data
+      daftarTim[sedangMengedit] = { nama, liga };
       sedangMengedit = null;
     } else {
-      daftarTim.push(nama);
+      // Mode tambah baru
+      if (sudahAda !== -1) { alert('Tim sudah ada!'); return; }
+      daftarTim.push({ nama, liga });
     }
-    input.value = '';
+
+    inputTim.value = '';
+    inputLiga.value = '';
     renderDaftarTim();
     simpanKeFirebase();
   }
@@ -72,10 +86,18 @@ App.FeatureLoaders.favorit = function(userRef) {
 
   document.getElementById('btnTambahTim').onclick = tambahTim;
 
-  App.Service.loadData('users/'+App.Auth.currentUser.uid+'/timFavorit', val=>{
-    daftarTim = Array.isArray(val)?val:[];
+  // Load data dari Firestore dengan backward compatibility
+  App.Service.loadData('users/' + App.Auth.currentUser.uid + '/timFavorit', val => {
+    if (Array.isArray(val)) {
+      // Handle data lama (array string) -> konversi ke format baru
+      daftarTim = val.map(t =>
+        typeof t === 'string' ? { nama: t, liga: 'Belum ditentukan' } : t
+      );
+    } else {
+      daftarTim = [];
+    }
     renderDaftarTim();
   });
 };
 
-console.log("✅ Feature 2: Favorit loaded");
+console.log("✅ Feature 2: Favorit loaded (dengan nama liga)");
