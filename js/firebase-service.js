@@ -1,16 +1,14 @@
 /**
  * firebase-service.js
- * Semua operasi Firebase (Auth + Database) + Registry Fitur
- * Tidak ada logika bisnis fitur di sini.
+ * Semua operasi Firebase (Auth + Firestore) + Registry Fitur
  */
 
-// Pastikan App namespace ada
 const App = window.App || {};
 
 App.Service = {
   // === AUTH ===
   auth: FirebaseApp.auth,
-  db: FirebaseApp.db,
+  db: FirebaseApp.db, // Firestore
 
   signIn(email, password) {
     return this.auth.signInWithEmailAndPassword(email, password);
@@ -28,27 +26,68 @@ App.Service = {
     return this.auth.onAuthStateChanged(callback);
   },
 
-  // === DATABASE ===
+  // === FIRESTORE DATABASE ===
+  
   getUserRef(uid) {
-    return this.db.ref('users/' + uid);
+    return this.db.collection('users').doc(uid);
   },
 
-  saveData(path, data) {
-    return this.db.ref(path).set(data);
+  async saveData(path, data) {
+    // Handle path format: 'users/uid/timFavorit'
+    const parts = path.split('/');
+    
+    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
+      // Simpan sebagai field di document user
+      await this.db.collection('users').doc(parts[1]).set({
+        timFavorit: data
+      }, { merge: true });
+      return;
+    }
+    
+    // Untuk path lain, simpan sebagai document
+    const docRef = this.db.doc(path);
+    await docRef.set(data, { merge: true });
   },
 
   loadData(path, callback) {
-    return this.db.ref(path).on('value', snapshot => {
-      callback(snapshot.val());
+    const parts = path.split('/');
+    
+    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
+      // Listen ke document user, ambil field timFavorit
+      return this.db.collection('users').doc(parts[1])
+        .onSnapshot(doc => {
+          const data = doc.data();
+          callback(data && data.timFavorit ? data.timFavorit : []);
+        }, error => {
+          console.error('Error loading data:', error);
+          callback([]);
+        });
+    }
+    
+    // Untuk path lain
+    const docRef = this.db.doc(path);
+    return docRef.onSnapshot(doc => {
+      callback(doc.data());
+    }, error => {
+      console.error('Error loading data:', error);
     });
   },
 
-  loadDataOnce(path) {
-    return this.db.ref(path).once('value').then(s => s.val());
+  async loadDataOnce(path) {
+    const parts = path.split('/');
+    
+    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
+      const doc = await this.db.collection('users').doc(parts[1]).get();
+      const data = doc.data();
+      return data && data.timFavorit ? data.timFavorit : [];
+    }
+    
+    const doc = await this.db.doc(path).get();
+    return doc.data();
   },
 
-  removeData(path) {
-    return this.db.ref(path).remove();
+  async removeData(path) {
+    await this.db.doc(path).delete();
   },
 
   // === HELPER ERROR ===
@@ -65,7 +104,7 @@ App.Service = {
   }
 };
 
-// === AUTH HANDLER ===
+// === AUTH HANDLER (tetap sama) ===
 App.Auth = {
   isLoginMode: true,
   currentUser: null,
@@ -93,7 +132,7 @@ App.Auth = {
       return;
     }
     if (password.length < 6) {
-      alert("️ Password minimal 6 karakter!");
+      alert("⚠️ Password minimal 6 karakter!");
       return;
     }
 
@@ -160,15 +199,13 @@ App.Auth = {
   }
 };
 
-// ✅ PENTING: Registry fitur didefinisikan di sini agar tersedia sebelum feature files di-load
+// Registry fitur
 App.FeatureLoaders = {};
 
-// Expose ke global
 window.App = App;
 
-// Inisialisasi Auth saat DOM siap
 document.addEventListener('DOMContentLoaded', () => {
   App.Auth.init();
 });
 
-console.log("✅ Firebase Service loaded");
+console.log("✅ Firebase Service (Firestore) loaded");
