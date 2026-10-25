@@ -1,6 +1,6 @@
 /**
  * firebase-service.js
- * Semua operasi Firebase (Auth + Firestore) + Registry Fitur
+ * Versi Firestore - Handle semua path user data
  */
 
 const App = window.App || {};
@@ -32,62 +32,131 @@ App.Service = {
     return this.db.collection('users').doc(uid);
   },
 
+  // Simpan data - Handle semua path users/uid/fieldName
   async saveData(path, data) {
-    // Handle path format: 'users/uid/timFavorit'
-    const parts = path.split('/');
-    
-    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
-      // Simpan sebagai field di document user
-      await this.db.collection('users').doc(parts[1]).set({
-        timFavorit: data
-      }, { merge: true });
-      return;
+    try {
+      const parts = path.split('/');
+      
+      // Handle semua path format: users/uid/fieldName
+      if (parts.length === 3 && parts[0] === 'users') {
+        const uid = parts[1];
+        const fieldName = parts[2];
+        
+        // Simpan sebagai field di document user
+        const updateData = {};
+        updateData[fieldName] = data;
+        
+        await this.db.collection('users').doc(uid).set(updateData, { merge: true });
+        return;
+      }
+      
+      // Untuk path lain (fallback)
+      const docRef = this.db.doc(path);
+      await docRef.set(data, { merge: true });
+      
+    } catch (error) {
+      console.error('Error saving data:', path, error);
+      throw error;
     }
-    
-    // Untuk path lain, simpan sebagai document
-    const docRef = this.db.doc(path);
-    await docRef.set(data, { merge: true });
   },
 
+  // Load data - Handle semua path users/uid/fieldName
   loadData(path, callback) {
-    const parts = path.split('/');
-    
-    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
-      // Listen ke document user, ambil field timFavorit
-      return this.db.collection('users').doc(parts[1])
-        .onSnapshot(doc => {
-          const data = doc.data();
-          callback(data && data.timFavorit ? data.timFavorit : []);
-        }, error => {
-          console.error('Error loading data:', error);
-          callback([]);
-        });
+    try {
+      const parts = path.split('/');
+      
+      // Handle semua path format: users/uid/fieldName
+      if (parts.length === 3 && parts[0] === 'users') {
+        const uid = parts[1];
+        const fieldName = parts[2];
+        
+        // Listen ke document user
+        return this.db.collection('users').doc(uid)
+          .onSnapshot(doc => {
+            const data = doc.data();
+            const result = data ? data[fieldName] : null;
+            
+            // Handle default value berdasarkan fieldName
+            if (result === undefined || result === null) {
+              if (fieldName === 'timFavorit') {
+                callback([]);
+              } else if (fieldName === 'notes' || fieldName === 'diskusi') {
+                callback([]);
+              } else {
+                callback(result);
+              }
+            } else {
+              callback(result);
+            }
+          }, error => {
+            console.error('Error loading data from path:', path, error);
+            callback(null);
+          });
+      }
+      
+      // Untuk path lain (fallback)
+      const docRef = this.db.doc(path);
+      return docRef.onSnapshot(doc => {
+        callback(doc.data());
+      }, error => {
+        console.error('Error loading data:', path, error);
+      });
+      
+    } catch (error) {
+      console.error('Error in loadData:', path, error);
+      return null;
     }
-    
-    // Untuk path lain
-    const docRef = this.db.doc(path);
-    return docRef.onSnapshot(doc => {
-      callback(doc.data());
-    }, error => {
-      console.error('Error loading data:', error);
-    });
   },
 
+  // Load data sekali
   async loadDataOnce(path) {
-    const parts = path.split('/');
-    
-    if (parts.length === 3 && parts[0] === 'users' && parts[2] === 'timFavorit') {
-      const doc = await this.db.collection('users').doc(parts[1]).get();
-      const data = doc.data();
-      return data && data.timFavorit ? data.timFavorit : [];
+    try {
+      const parts = path.split('/');
+      
+      // Handle semua path format: users/uid/fieldName
+      if (parts.length === 3 && parts[0] === 'users') {
+        const uid = parts[1];
+        const fieldName = parts[2];
+        
+        const doc = await this.db.collection('users').doc(uid).get();
+        const data = doc.data();
+        return data ? data[fieldName] : null;
+      }
+      
+      // Untuk path lain
+      const doc = await this.db.doc(path).get();
+      return doc.data();
+      
+    } catch (error) {
+      console.error('Error in loadDataOnce:', path, error);
+      return null;
     }
-    
-    const doc = await this.db.doc(path).get();
-    return doc.data();
   },
 
+  // Hapus field dari document user
   async removeData(path) {
-    await this.db.doc(path).delete();
+    try {
+      const parts = path.split('/');
+      
+      // Handle path format: users/uid/fieldName
+      if (parts.length === 3 && parts[0] === 'users') {
+        const uid = parts[1];
+        const fieldName = parts[2];
+        
+        const updateData = {};
+        updateData[fieldName] = firebase.firestore.FieldValue.delete();
+        
+        await this.db.collection('users').doc(uid).update(updateData);
+        return;
+      }
+      
+      // Fallback
+      await this.db.doc(path).delete();
+      
+    } catch (error) {
+      console.error('Error removing data:', path, error);
+      throw error;
+    }
   },
 
   // === HELPER ERROR ===
@@ -104,7 +173,7 @@ App.Service = {
   }
 };
 
-// === AUTH HANDLER (tetap sama) ===
+// === AUTH HANDLER ===
 App.Auth = {
   isLoginMode: true,
   currentUser: null,
