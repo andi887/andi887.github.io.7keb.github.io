@@ -1,6 +1,6 @@
 /**
  * feature2-favorit.js
- * Fitur 2: Kumpulan Tim Favorit (dengan nama liga)
+ * Fitur 2: Kumpulan Tim Favorit (dengan nama liga + Debug Logging Lengkap)
  */
 
 App.FeatureLoaders.favorit = function(userRef) {
@@ -39,15 +39,31 @@ App.FeatureLoaders.favorit = function(userRef) {
         document.getElementById('inputTim').value = t.nama;
         document.getElementById('inputLiga').value = t.liga;
         sedangMengedit = parseInt(b.dataset.idx);
+        console.log('🟡 [DEBUG] Mode Edit diaktifkan untuk index:', sedangMengedit);
       };
     });
+    
     ul.querySelectorAll('button[data-act="hapus"]').forEach(b => {
       b.onclick = () => hapusTim(parseInt(b.dataset.idx));
     });
   }
 
   function simpanKeFirebase() {
-    App.Service.saveData('users/' + App.Auth.currentUser.uid + '/timFavorit', daftarTim);
+    const uid = App.Auth.currentUser.uid;
+    const path = `users/${uid}/timFavorit`;
+    
+    console.log('🔵 [DEBUG] Mencoba menyimpan ke Firestore...');
+    console.log('🔵 [DEBUG] Path target:', path);
+    console.log('🔵 [DEBUG] Data yang akan disimpan:', JSON.stringify(daftarTim, null, 2));
+
+    App.Service.saveData(path, daftarTim)
+      .then(() => {
+        console.log('✅ [DEBUG] BERHASIL! Data tersimpan ke Firestore.');
+      })
+      .catch(error => {
+        console.error('❌ [DEBUG] GAGAL! Error saat menyimpan ke Firestore:', error);
+        alert('Gagal menyimpan ke database: ' + error.message);
+      });
   }
 
   function tambahTim() {
@@ -65,19 +81,22 @@ App.FeatureLoaders.favorit = function(userRef) {
       // Mode edit: update data
       daftarTim[sedangMengedit] = { nama, liga };
       sedangMengedit = null;
+      console.log('🟡 [DEBUG] Data diperbarui di memori (Mode Edit)');
     } else {
       // Mode tambah baru
       if (sudahAda !== -1) { alert('Tim sudah ada!'); return; }
       daftarTim.push({ nama, liga });
+      console.log('🟢 [DEBUG] Data baru ditambahkan ke memori (Mode Tambah)');
     }
 
     inputTim.value = '';
     inputLiga.value = '';
     renderDaftarTim();
-    simpanKeFirebase();
+    simpanKeFirebase(); // <-- Ini yang akan memicu log debug
   }
 
   function hapusTim(idx) {
+    console.log('🔴 [DEBUG] Menghapus tim pada index:', idx);
     daftarTim.splice(idx, 1);
     if (sedangMengedit === idx) sedangMengedit = null;
     renderDaftarTim();
@@ -86,10 +105,13 @@ App.FeatureLoaders.favorit = function(userRef) {
 
   document.getElementById('btnTambahTim').onclick = tambahTim;
 
-  // Load data dari Firestore dengan backward compatibility
+  // Load data dari Firestore saat fitur dimuat
+  console.log('🟣 [DEBUG] Memulai proses memuat data dari Firestore...');
   App.Service.loadData('users/' + App.Auth.currentUser.uid + '/timFavorit', val => {
+    console.log('🟣 [DEBUG] Data diterima dari Firestore:', val);
+    
     if (Array.isArray(val)) {
-      // Handle data lama (array string) -> konversi ke format baru
+      // Handle data lama (array string) -> konversi ke format object baru
       daftarTim = val.map(t =>
         typeof t === 'string' ? { nama: t, liga: 'Belum ditentukan' } : t
       );
@@ -100,4 +122,4 @@ App.FeatureLoaders.favorit = function(userRef) {
   });
 };
 
-console.log("✅ Feature 2: Favorit loaded (dengan nama liga)");
+console.log("✅ Feature 2: Favorit loaded (dengan nama liga & debug logging)");
