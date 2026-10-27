@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sistem Analisis Olahraga — Realtime Firebase</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
   
   <!-- Firebase SDK (harus load pertama) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
- <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   
   <!-- CSS -->
   <link rel="stylesheet" href="css/style.css" />
@@ -23,7 +24,6 @@
       <button id="btnLogin">Login</button>
     </div>
   </header>
-
   <!-- FORM AUTH -->
   <div id="loginForm">
     <h3 id="authTitle">Login Email</h3>
@@ -32,28 +32,27 @@
     <button id="btnAuthAction" onclick="App.Auth.handleAuth()">Login</button>
     <p id="authToggle" class="auth-toggle">Belum punya akun? Klik di sini untuk Daftar</p>
   </div>
-
-  <!-- NAVIGASI DASHBOARD -->
+  <!-- NAVIGASI DASHBOARD - FINAL 7 FITUR -->
   <nav id="mainNav" style="display:none;">
     <button data-feature="parlay" class="active">1. Analisis Parlay + O/U</button>
     <button data-feature="favorit">2. Kumpulan Tim Favorit</button>
     <button data-feature="sketsa">3. Sketsa Bil</button>
     <button data-feature="diskusi">4. Room Diskusi</button>
     <button data-feature="serba">5. Serba Serbi</button>
-    <button data-feature="klasemen">6. Klasemen Live</button> <!-- BARU DITAMBAHKAN -->
+    <button data-feature="klasemen">6. Klasemen Live</button>
+    <button data-feature="gen">7. Generator</button>
   </nav>
-
-  <!-- CONTAINER FITUR -->
+  <!-- CONTAINER FITUR - FINAL 7 FITUR -->
   <main id="featureContainer">
     <div id="parlay" class="section active"></div>
     <div id="favorit" class="section"></div>
     <div id="sketsa" class="section"></div>
     <div id="diskusi" class="section"></div>
     <div id="serba" class="section"></div>
-    <div id="klasemen" class="section"></div> <!-- BARU DITAMBAHKAN -->
+    <div id="klasemen" class="section"></div>
+    <div id="gen" class="section"></div>
   </main>
-
-  <!-- SCRIPT: Urutan load PENTING -->
+  <!-- SCRIPT: Urutan load PENTING - FIXED -->
   <script src="js/firebase-config.js"></script>
   <script src="js/firebase-service.js"></script>
   <script src="js/features/feature1-parlay.js"></script>
@@ -61,7 +60,8 @@
   <script src="js/features/feature3-sketsa.js"></script>
   <script src="js/features/feature4-diskusi.js"></script>
   <script src="js/features/feature5-serba.js"></script>
-  <script src="js/features/feature6-klasemen.js"></script> <!-- BARU DITAMBAHKAN -->
+  <script src="js/features/feature6-klasemen.js"></script>
+  <script src="js/features/feature7-gen.js"></script>
   <script src="js/dashboard.js"></script>
 </body>
 </html>
