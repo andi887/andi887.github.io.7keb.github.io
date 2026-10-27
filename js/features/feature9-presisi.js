@@ -1,4 +1,4 @@
-**
+/**
  * feature9-presisi.js - KALKULATOR PRESISI ODDS BANDAR
  * Support: 1X2, Over/Under (multi-line), BTTS, Double Chance
  * Metode: Remove Margin (Multiplicative, Shin, Power) + Implied Lambda + Blend xG
