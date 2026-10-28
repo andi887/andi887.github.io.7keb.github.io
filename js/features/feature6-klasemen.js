@@ -1,7 +1,6 @@
 /**
- * feature6-klasemen.js (Versi 4.1 - Fixed setSelectionRange + 100% Stable)
+ * feature6-klasemen.js (Versi 3.0 - Auto Sort & Focus Preserving)
  * Fitur 6: Klasemen Manual dengan Pengurutan Otomatis yang Halus
- * FIX: InvalidStateError on input type=number
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
 
@@ -34,7 +33,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
         <div style="display:flex; gap:10px;">
           <span id="syncStatus" style="font-size:0.85em; color:#666; align-self:center;">🟡 Belum disimpan</span>
           <button class="btn-success" id="btnSaveKlasemen">💾 Simpan ke Cloud</button>
-          <button class="btn-danger" id="btnClearKlasemen">🗑 Hapus Data</button>
+          <button class="btn-danger" id="btnClearKlasemen">🗑️ Hapus Data</button>
         </div>
       </div>
       <p class="hint">💡 <strong>Tips:</strong> Isi M, S, K, GM, GK. Kolom <strong>Main</strong> & <strong>Poin</strong> otomatis terhitung. Tekan <strong>Enter</strong> atau klik di luar kotak untuk mengurutkan ulang klasemen.</p>
@@ -71,7 +70,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
       populateLeagueDropdown();
     } catch (err) {
       console.error('❌ Gagal memuat teams.json:', err.message);
-      container.innerHTML += `<p style="color:red;">⚠ Gagal memuat data/teams.json.</p>`;
+      container.innerHTML += `<p style="color:red;">⚠️ Gagal memuat data/teams.json.</p>`;
     }
   }
 
@@ -87,15 +86,15 @@ App.FeatureLoaders.klasemen = function(userRef) {
     });
   }
 
-  // === 3. BIND BUTTON EVENTS ===
+  // === 3. BIND EVENTS ===
   document.getElementById('btnLoadTemplate').onclick = loadTemplate;
   document.getElementById('btnSaveKlasemen').onclick = saveKlasemen;
   document.getElementById('btnClearKlasemen').onclick = clearKlasemen;
 
-  // === 4. LOAD TEMPLATE & INIT ===
+  // === 4. LOAD TEMPLATE & INIT REAL-TIME LISTENER ===
   async function loadTemplate() {
     const league = document.getElementById('leagueSelect').value;
-    if (!league) { alert('⚠ Pilih liga terlebih dahulu!'); return; }
+    if (!league) { alert('⚠️ Pilih liga terlebih dahulu!'); return; }
 
     if (unsubscribeKlasemen) { unsubscribeKlasemen(); unsubscribeKlasemen = null; }
 
@@ -125,6 +124,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
     document.getElementById('editorTitle').textContent = `🏆 ${league}`;
     document.getElementById('klasemenEditor').style.display = 'block';
     
+    // Render awal
     renderTable();
     setupRealtimeListener(safeKey, storageKey);
   }
@@ -141,9 +141,9 @@ App.FeatureLoaders.klasemen = function(userRef) {
         const data = doc.data();
         currentTeams = data.teams;
         localStorage.setItem(storageKey, JSON.stringify(data));
-        renderTable(); 
+        renderTable(); // Re-render saat ada update dari device lain
         document.getElementById('syncStatus').textContent = '🟢 Live (Tersinkron)';
-        document.getElementById('lastSaved').textContent = `☁ Update dari Cloud: ${new Date(data.lastUpdated).toLocaleString('id-ID')}`;
+        document.getElementById('lastSaved').textContent = `☁️ Update dari Cloud: ${new Date(data.lastUpdated).toLocaleString('id-ID')}`;
       } else {
         document.getElementById('syncStatus').textContent = '⚪ Belum ada data di Cloud';
       }
@@ -158,7 +158,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
     return { name, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, points: 0 };
   }
 
-  // === 7. RENDER TABEL (Hanya Generate HTML, Tanpa Bind Event) ===
+  // === 7. RENDER TABEL (DENGAN DATA-TEAM BUKAN DATA-IDX) ===
   function renderTable() {
     const tbody = document.getElementById('klasemenBody');
     
@@ -176,6 +176,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
     currentTeams.forEach((team, idx) => {
       const gd = team.gf - team.ga;
       const tr = document.createElement('tr');
+      // PERUBAHAN PENTING: Gunakan data-team="${team.name}" sebagai pengganti data-idx
       tr.innerHTML = `
         <td><strong class="rank-display">${idx + 1}</strong></td>
         <td style="text-align:left; font-weight:500;">${team.name}</td>
@@ -192,49 +193,45 @@ App.FeatureLoaders.klasemen = function(userRef) {
       tbody.appendChild(tr);
     });
 
+    // === BIND INPUT EVENTS (AUTO-CALCULATE + AUTO-SORT ON BLUR) ===
+    tbody.querySelectorAll('.stat-input').forEach(input => {
+      // 1. Update instan saat mengetik (tanpa re-render agar tidak kehilangan fokus)
+      input.addEventListener('input', (e) => {
+        updateTeamDataInstant(e.target);
+      });
+
+      // 2. Auto-sort saat user selesai mengedit (klik di luar atau tekan Tab)
+      input.addEventListener('blur', (e) => {
+        sortAndReRender(e.target);
+      });
+      
+      // 3. Auto-sort saat user menekan Enter
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur(); // Memicu event 'blur' di atas
+        }
+      });
+    });
+
+    // Bind remove buttons
+    tbody.querySelectorAll('[data-team]').forEach(btn => {
+      // Pastikan hanya tombol hapus yang dipicu
+      if (btn.tagName === 'BUTTON') {
+        btn.onclick = () => {
+          const teamName = btn.dataset.team;
+          if (confirm(`Hapus ${teamName} dari klasemen?`)) {
+            currentTeams = currentTeams.filter(t => t.name !== teamName);
+            renderTable(); // Re-render penuh aman karena tidak ada input yang difokuskan
+            document.getElementById('syncStatus').textContent = '🟡 Ada perubahan belum disimpan';
+          }
+        };
+      }
+    });
+
     applyZoneHighlighting();
   }
 
-  // === 8. EVENT DELEGATION (Dijalankan HANYA SEKALI saat init) ===
-  function bindTableEvents() {
-    const tbody = document.getElementById('klasemenBody');
-
-    // 1. Event INPUT (Menyadap semua input di dalam tbody)
-    tbody.addEventListener('input', (e) => {
-      if (e.target.classList.contains('stat-input')) {
-        updateTeamDataInstant(e.target);
-      }
-    });
-
-    // 2. Event BLUR (PENTING: gunakan 'true' untuk capture phase karena blur tidak bubble)
-    tbody.addEventListener('blur', (e) => {
-      if (e.target.classList.contains('stat-input')) {
-        sortAndReRender(e.target);
-      }
-    }, true); 
-    
-    // 3. Event KEYDOWN (Untuk menangani tombol Enter)
-    tbody.addEventListener('keydown', (e) => {
-      if (e.target.classList.contains('stat-input') && e.key === 'Enter') {
-        e.preventDefault();
-        e.target.blur();
-      }
-    });
-
-    // 4. Event CLICK (Untuk tombol hapus)
-    tbody.addEventListener('click', (e) => {
-      if (e.target.classList.contains('btn-danger') && e.target.tagName === 'BUTTON') {
-        const teamName = e.target.dataset.team;
-        if (confirm(`Hapus ${teamName} dari klasemen?`)) {
-          currentTeams = currentTeams.filter(t => t.name !== teamName);
-          renderTable(); 
-          document.getElementById('syncStatus').textContent = '🟡 Ada perubahan belum disimpan';
-        }
-      }
-    });
-  }
-
-  // === 9. HELPER: UPDATE DATA SECARA INSTAN ===
+  // === 8. HELPER: UPDATE DATA SECARA INSTAN (TANPA RE-RENDER) ===
   function updateTeamDataInstant(el) {
     const teamName = el.dataset.team;
     const field = el.dataset.field;
@@ -244,30 +241,28 @@ App.FeatureLoaders.klasemen = function(userRef) {
     if (!team) return;
 
     team[field] = val;
+    // Auto-calculate
     team.played = team.won + team.draw + team.lost;
     team.points = (team.won * 3) + (team.draw * 1);
 
+    // Update tampilan baris ini saja secara langsung
     const row = el.closest('tr');
-    if (row) {
-      const playedInput = row.querySelector('[data-field="played"]');
-      const pointsInput = row.querySelector('[data-field="points"]');
-      const gdCell = row.querySelector('.gd-cell');
-      if (playedInput) playedInput.value = team.played;
-      if (pointsInput) pointsInput.value = team.points;
-      if (gdCell) {
-        const gd = team.gf - team.ga;
-        gdCell.textContent = (gd > 0 ? '+' : '') + gd;
-      }
-    }
+    row.querySelector('[data-field="played"]').value = team.played;
+    row.querySelector('[data-field="points"]').value = team.points;
+    
+    const gd = team.gf - team.ga;
+    row.querySelector('.gd-cell').textContent = (gd > 0 ? '+' : '') + gd;
 
     document.getElementById('syncStatus').textContent = '🟡 Belum diurutkan (Tekan Enter atau klik di luar)';
   }
 
-  // === 10. HELPER: SORT DAN RE-RENDER DENGAN FOCUS PRESERVATION (FIXED) ===
+  // === 9. HELPER: SORT DAN RE-RENDER DENGAN FOCUS PRESERVATION ===
   function sortAndReRender(lastActiveElement) {
+    // 1. Ingat elemen mana yang sedang diedit
     const activeTeamName = lastActiveElement ? lastActiveElement.dataset.team : null;
     const activeField = lastActiveElement ? lastActiveElement.dataset.field : null;
 
+    // 2. Sort array data
     currentTeams.sort((a, b) => {
       const gdA = a.gf - a.ga;
       const gdB = b.gf - b.ga;
@@ -276,36 +271,23 @@ App.FeatureLoaders.klasemen = function(userRef) {
       return b.gf - a.gf;
     });
 
+    // 3. Render ulang tabel (ini akan mengubah urutan baris / idx)
     renderTable();
 
+    // 4. Kembalikan fokus ke input yang sama berdasarkan nama tim, BUKAN idx
     if (activeTeamName && activeField) {
-      const newInput = document.querySelector(`input[data-team="${CSS.escape(activeTeamName)}"][data-field="${activeField}"]`);
+      const newInput = document.querySelector(`input[data-team="${activeTeamName}"][data-field="${activeField}"]`);
       if (newInput) {
         newInput.focus();
-        // FIX: setSelectionRange tidak support untuk type=number, jadi pakai try-catch dan fallback
-        try {
-          // Hanya panggil setSelectionRange jika tipenya mendukung
-          const supportsSelection = newInput.type === 'text' || newInput.type === 'search' || newInput.type === 'tel' || newInput.type === 'url' || newInput.type === 'password';
-          if (supportsSelection && typeof newInput.setSelectionRange === 'function') {
-            newInput.setSelectionRange(newInput.value.length, newInput.value.length);
-          } else {
-            // Untuk type=number, cukup select() atau biarkan focus saja
-            if (typeof newInput.select === 'function') {
-              newInput.select();
-            }
-          }
-        } catch (err) {
-          // Abaikan InvalidStateError, cukup focus saja sudah cukup
-          console.debug('setSelectionRange tidak didukung untuk', newInput.type);
-        }
+        // Opsional: letakkan kursor di akhir angka
+        newInput.setSelectionRange(newInput.value.length, newInput.value.length);
       }
     }
     
-    const statusEl = document.getElementById('syncStatus');
-    if (statusEl) statusEl.textContent = '🟢 Terurut & Siap Simpan';
+    document.getElementById('syncStatus').textContent = '🟢 Terurut & Siap Simpan';
   }
 
-  // === 11. HIGHLIGHT ZONA ===
+  // === 10. HIGHLIGHT ZONA ===
   function applyZoneHighlighting() {
     const rows = document.querySelectorAll('#klasemenBody tr');
     rows.forEach((row, idx) => {
@@ -318,10 +300,10 @@ App.FeatureLoaders.klasemen = function(userRef) {
     });
   }
 
-  // === 12. SIMPAN KE FIRESTORE & LOCALSTORAGE ===
+  // === 11. SIMPAN KE FIRESTORE & LOCALSTORAGE ===
   async function saveKlasemen() {
     if (!currentLeague || currentTeams.length === 0) {
-      alert('⚠ Tidak ada data untuk disimpan!');
+      alert('⚠️ Tidak ada data untuk disimpan!');
       return;
     }
 
@@ -357,10 +339,10 @@ App.FeatureLoaders.klasemen = function(userRef) {
     }
   }
 
-  // === 13. RESET / HAPUS DATA ===
+  // === 12. RESET / HAPUS DATA ===
   async function clearKlasemen() {
     if (!currentLeague) return;
-    if (!confirm(`⚠ PERINGATAN: Hapus semua data klasemen untuk ${currentLeague} secara permanen?`)) return;
+    if (!confirm(`⚠️ PERINGATAN: Hapus semua data klasemen untuk ${currentLeague} secara permanen?`)) return;
 
     try {
       const safeKey = sanitizeKey(currentLeague);
@@ -384,14 +366,13 @@ App.FeatureLoaders.klasemen = function(userRef) {
     }
   }
 
-  // === 14. SANITIZE KEY ===
+  // === 13. SANITIZE KEY ===
   function sanitizeKey(str) {
     return str.replace(/[\.\#\$\[\]\/]/g, '_');
   }
 
   // === INIT ===
   loadTeams();
-  bindTableEvents();
 
   return {
     cleanup: () => {
@@ -403,4 +384,4 @@ App.FeatureLoaders.klasemen = function(userRef) {
   };
 };
 
-console.log("✅ Feature 6: Klasemen Manual (Event Delegation Stable + Fixed) loaded");
+console.log("✅ Feature 6: Klasemen Manual (Auto-Sort & Focus Preserving) loaded");
