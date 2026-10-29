@@ -5,7 +5,6 @@
  */
 
 const FIREBASE_CONFIG = {
- const firebaseConfig = {
   apiKey: "AIzaSyAOf4bjjOQPCgp3kdioCSwEmNq2GNksv04",
   authDomain: "ber3lebihbaik.firebaseapp.com",
   databaseURL: "https://ber3lebihbaik-default-rtdb.asia-southeast1.firebasedatabase.app",
