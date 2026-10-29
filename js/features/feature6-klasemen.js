@@ -1,6 +1,6 @@
 /**
- * feature6-klasemen.js (Versi 3.0 - Auto Sort & Focus Preserving)
- * Fitur 6: Klasemen Manual dengan Pengurutan Otomatis yang Halus
+ * feature6-klasemen.js (Versi 4.0 - Auto-Save ke Firestore)
+ * Fitur 6: Klasemen Manual dengan Pengurutan Otomatis & Auto-Save Cloud
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
 
@@ -10,7 +10,10 @@ App.FeatureLoaders.klasemen = function(userRef) {
   let currentLeague = '';
   let currentTeams = [];
   const uid = App.Auth.currentUser.uid;
-  let unsubscribeKlasemen = null; 
+  const db = App.Service.db; // ⭐ Gunakan instance dari App.Service
+  let unsubscribeKlasemen = null;
+  let autoSaveTimeout = null; // ⭐ BARU: untuk debounce auto-save
+  let isUpdatingFromCloud = false; // ⭐ BARU: flag untuk cegah loop
 
   // === RENDER UI ===
   container.innerHTML = `
@@ -18,25 +21,25 @@ App.FeatureLoaders.klasemen = function(userRef) {
     
     <div class="sketsa-bil-section">
       <h3>🏆 Pilih Liga</h3>
-      <p class="hint">Pilih liga. Data akan dimuat dari Firestore & LocalStorage (fallback).</p>
+      <p class="hint">Pilih liga. Data otomatis disinkronkan dengan Cloud Firestore.</p>
       <div class="input-group">
         <select id="leagueSelect" class="team-input" style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;">
           <option value="">-- Pilih Liga --</option>
         </select>
-        <button class="btn-primary" id="btnLoadTemplate">📋 Muat / Reset Template</button>
+        <button class="btn-primary" id="btnLoadTemplate">📋 Muat Template Liga</button>
       </div>
     </div>
 
     <div id="klasemenEditor" class="sketsa-bil-section" style="display:none;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap: wrap; gap: 10px;">
         <h3 id="editorTitle" style="margin:0;">Edit Klasemen</h3>
-        <div style="display:flex; gap:10px;">
-          <span id="syncStatus" style="font-size:0.85em; color:#666; align-self:center;">🟡 Belum disimpan</span>
-          <button class="btn-success" id="btnSaveKlasemen">💾 Simpan ke Cloud</button>
-          <button class="btn-danger" id="btnClearKlasemen">🗑️ Hapus Data</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span id="syncStatus" style="font-size:0.85em; color:#666; padding:4px 8px; background:#f0f0f0; border-radius:4px;">⚪ Belum aktif</span>
+          <button class="btn-success" id="btnForceSave">💾 Force Save</button>
+          <button class="btn-danger" id="btnClearKlasemen">🗑️ Reset Liga</button>
         </div>
       </div>
-      <p class="hint">💡 <strong>Tips:</strong> Isi M, S, K, GM, GK. Kolom <strong>Main</strong> & <strong>Poin</strong> otomatis terhitung. Tekan <strong>Enter</strong> atau klik di luar kotak untuk mengurutkan ulang klasemen.</p>
+      <p class="hint">💡 <strong>Tips:</strong> Isi M, S, K, GM, GK. Kolom <strong>Main</strong>, <strong>SG</strong>, & <strong>Poin</strong> otomatis terhitung. Klasemen otomatis diurutkan setelah Anda selesai mengedit (klik di luar / tekan Enter).</p>
       <div style="overflow-x:auto;">
         <table id="klasemenTable">
           <thead>
@@ -57,7 +60,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
           <tbody id="klasemenBody"></tbody>
         </table>
       </div>
-      <p class="hint" id="lastSaved" style="margin-top:10px; font-style:italic;"></p>
+      <p class="hint" id="lastSaved" style="margin-top:10px; font-style:italic; color:#666;"></p>
     </div>
   `;
 
@@ -88,7 +91,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
   // === 3. BIND EVENTS ===
   document.getElementById('btnLoadTemplate').onclick = loadTemplate;
-  document.getElementById('btnSaveKlasemen').onclick = saveKlasemen;
+  document.getElementById('btnForceSave').onclick = () => saveToFirestore(true);
   document.getElementById('btnClearKlasemen').onclick = clearKlasemen;
 
   // === 4. LOAD TEMPLATE & INIT REAL-TIME LISTENER ===
@@ -100,57 +103,59 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
     currentLeague = league;
     const safeKey = sanitizeKey(league);
-    const storageKey = `klasemen_${uid}_${safeKey}`;
     const teams = teamsData[league] || [];
 
-    const localData = localStorage.getItem(storageKey);
-    let hasLocalData = false;
-
-    if (localData) {
-      try {
-        const parsed = JSON.parse(localData);
-        if (parsed.teams && parsed.teams.length > 0) {
-          currentTeams = parsed.teams;
-          hasLocalData = true;
-          document.getElementById('lastSaved').textContent = `📱 Dimuat dari cache lokal`;
-        }
-      } catch (e) { console.warn('Gagal parse localStorage', e); }
-    }
-
-    if (!hasLocalData) {
-      currentTeams = teams.map(name => createEmptyTeam(name));
-    }
+    // Default: template kosong
+    currentTeams = teams.map(name => createEmptyTeam(name));
 
     document.getElementById('editorTitle').textContent = `🏆 ${league}`;
     document.getElementById('klasemenEditor').style.display = 'block';
     
-    // Render awal
+    // Render awal (template kosong)
     renderTable();
-    setupRealtimeListener(safeKey, storageKey);
+    
+    // Setup listener real-time dari Firestore
+    setupRealtimeListener(safeKey);
   }
 
   // === 5. REAL-TIME FIRESTORE LISTENER ===
-  function setupRealtimeListener(safeKey, storageKey) {
-    const db = firebase.firestore();
+  function setupRealtimeListener(safeKey) {
     const docRef = db.collection('users').doc(uid).collection('klasemen').doc(safeKey);
 
-    document.getElementById('syncStatus').textContent = '🔄 Sinkronisasi...';
+    updateSyncStatus('🔄', 'Sinkronisasi...', '#999');
 
     unsubscribeKlasemen = docRef.onSnapshot((doc) => {
+      if (isUpdatingFromCloud) {
+        // Skip jika update berasal dari diri sendiri (cegah loop)
+        isUpdatingFromCloud = false;
+        return;
+      }
+
       if (doc.exists) {
         const data = doc.data();
-        currentTeams = data.teams;
-        localStorage.setItem(storageKey, JSON.stringify(data));
-        renderTable(); // Re-render saat ada update dari device lain
-        document.getElementById('syncStatus').textContent = '🟢 Live (Tersinkron)';
-        document.getElementById('lastSaved').textContent = `☁️ Update dari Cloud: ${new Date(data.lastUpdated).toLocaleString('id-ID')}`;
+        currentTeams = data.teams || [];
+        renderTable();
+        updateSyncStatus('🟢', 'Live (Tersinkron)', '#28a745');
+        
+        if (data.lastUpdated) {
+          const ts = data.lastUpdated.toDate ? data.lastUpdated.toDate() : new Date(data.lastUpdated);
+          document.getElementById('lastSaved').textContent = `☁️ Update terakhir: ${ts.toLocaleString('id-ID')}`;
+        }
       } else {
-        document.getElementById('syncStatus').textContent = '⚪ Belum ada data di Cloud';
+        updateSyncStatus('⚪', 'Belum ada data di Cloud', '#999');
+        document.getElementById('lastSaved').textContent = 'ℹ️ Belum ada data tersimpan untuk liga ini.';
       }
     }, (error) => {
       console.error("Firestore listener error:", error);
-      document.getElementById('syncStatus').textContent = '🔴 Offline (LocalStorage)';
+      updateSyncStatus('🔴', 'Error: ' + error.message, '#dc3545');
     });
+  }
+
+  // === HELPER: Update Sync Status ===
+  function updateSyncStatus(icon, text, color) {
+    const el = document.getElementById('syncStatus');
+    el.textContent = `${icon} ${text}`;
+    el.style.color = color;
   }
 
   // === 6. CREATE EMPTY TEAM ===
@@ -158,25 +163,31 @@ App.FeatureLoaders.klasemen = function(userRef) {
     return { name, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, points: 0 };
   }
 
-  // === 7. RENDER TABEL (DENGAN DATA-TEAM BUKAN DATA-IDX) ===
+  // === 7. RENDER TABEL ===
   function renderTable() {
     const tbody = document.getElementById('klasemenBody');
     
-    // Sort: Poin (desc) -> Selisih Gol (desc) -> Gol Masuk (desc)
+    // Sort: Poin (desc) -> Selisih Gol (desc) -> Gol Masuk (desc) -> Nama (asc)
     currentTeams.sort((a, b) => {
       const gdA = a.gf - a.ga;
       const gdB = b.gf - b.ga;
       if (b.points !== a.points) return b.points - a.points;
       if (gdB !== gdA) return gdB - gdA;
-      return b.gf - a.gf;
+      if (b.gf !== a.gf) return b.gf - a.gf;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Re-calculate Main, Poin, SG untuk semua tim (memastikan konsisten)
+    currentTeams.forEach(team => {
+      team.played = (team.won || 0) + (team.draw || 0) + (team.lost || 0);
+      team.points = ((team.won || 0) * 3) + ((team.draw || 0) * 1);
     });
 
     tbody.innerHTML = '';
 
     currentTeams.forEach((team, idx) => {
-      const gd = team.gf - team.ga;
+      const gd = (team.gf || 0) - (team.ga || 0);
       const tr = document.createElement('tr');
-      // PERUBAHAN PENTING: Gunakan data-team="${team.name}" sebagai pengganti data-idx
       tr.innerHTML = `
         <td><strong class="rank-display">${idx + 1}</strong></td>
         <td style="text-align:left; font-weight:500;">${team.name}</td>
@@ -186,52 +197,59 @@ App.FeatureLoaders.klasemen = function(userRef) {
         <td><input type="number" min="0" value="${team.lost}" data-team="${team.name}" data-field="lost" class="stat-input"></td>
         <td><input type="number" min="0" value="${team.gf}" data-team="${team.name}" data-field="gf" class="stat-input"></td>
         <td><input type="number" min="0" value="${team.ga}" data-team="${team.name}" data-field="ga" class="stat-input"></td>
-        <td class="gd-cell" style="font-weight:bold;">${gd > 0 ? '+' : ''}${gd}</td>
+        <td class="gd-cell" style="font-weight:bold; color:${gd > 0 ? '#28a745' : gd < 0 ? '#dc3545' : '#666'}">${gd > 0 ? '+' : ''}${gd}</td>
         <td><input type="number" min="0" value="${team.points}" data-team="${team.name}" data-field="points" class="stat-input points-input" readonly style="background:#f0f0f0; font-weight:bold;"></td>
         <td><button class="btn-small btn-danger" data-team="${team.name}" title="Hapus Tim">✕</button></td>
       `;
       tbody.appendChild(tr);
     });
 
-    // === BIND INPUT EVENTS (AUTO-CALCULATE + AUTO-SORT ON BLUR) ===
+    // === BIND INPUT EVENTS ===
     tbody.querySelectorAll('.stat-input').forEach(input => {
-      // 1. Update instan saat mengetik (tanpa re-render agar tidak kehilangan fokus)
+      // 1. Update instan saat mengetik
       input.addEventListener('input', (e) => {
         updateTeamDataInstant(e.target);
       });
 
-      // 2. Auto-sort saat user selesai mengedit (klik di luar atau tekan Tab)
+      // 2. Auto-sort + auto-save saat selesai mengedit (blur)
       input.addEventListener('blur', (e) => {
         sortAndReRender(e.target);
+        triggerAutoSave(); // ⭐ BARU: auto-save setelah blur
       });
       
-      // 3. Auto-sort saat user menekan Enter
+      // 3. Auto-sort + auto-save saat Enter
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          e.target.blur(); // Memicu event 'blur' di atas
+          e.preventDefault();
+          // Pindah ke input berikutnya di baris yang sama (lebih UX friendly)
+          const allInputs = Array.from(tbody.querySelectorAll('.stat-input:not([readonly])'));
+          const currentIdx = allInputs.indexOf(e.target);
+          if (currentIdx < allInputs.length - 1) {
+            allInputs[currentIdx + 1].focus();
+            allInputs[currentIdx + 1].select();
+          } else {
+            e.target.blur();
+          }
         }
       });
     });
 
     // Bind remove buttons
-    tbody.querySelectorAll('[data-team]').forEach(btn => {
-      // Pastikan hanya tombol hapus yang dipicu
-      if (btn.tagName === 'BUTTON') {
-        btn.onclick = () => {
-          const teamName = btn.dataset.team;
-          if (confirm(`Hapus ${teamName} dari klasemen?`)) {
-            currentTeams = currentTeams.filter(t => t.name !== teamName);
-            renderTable(); // Re-render penuh aman karena tidak ada input yang difokuskan
-            document.getElementById('syncStatus').textContent = '🟡 Ada perubahan belum disimpan';
-          }
-        };
-      }
+    tbody.querySelectorAll('button.btn-danger[data-team]').forEach(btn => {
+      btn.onclick = () => {
+        const teamName = btn.dataset.team;
+        if (confirm(`Hapus ${teamName} dari klasemen?`)) {
+          currentTeams = currentTeams.filter(t => t.name !== teamName);
+          renderTable();
+          triggerAutoSave(); // ⭐ Auto-save setelah hapus
+        }
+      };
     });
 
     applyZoneHighlighting();
   }
 
-  // === 8. HELPER: UPDATE DATA SECARA INSTAN (TANPA RE-RENDER) ===
+  // === 8. HELPER: UPDATE DATA SECARA INSTAN ===
   function updateTeamDataInstant(el) {
     const teamName = el.dataset.team;
     const field = el.dataset.field;
@@ -242,49 +260,56 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
     team[field] = val;
     // Auto-calculate
-    team.played = team.won + team.draw + team.lost;
-    team.points = (team.won * 3) + (team.draw * 1);
+    team.played = (team.won || 0) + (team.draw || 0) + (team.lost || 0);
+    team.points = ((team.won || 0) * 3) + ((team.draw || 0) * 1);
 
-    // Update tampilan baris ini saja secara langsung
+    // Update tampilan baris ini saja
     const row = el.closest('tr');
-    row.querySelector('[data-field="played"]').value = team.played;
-    row.querySelector('[data-field="points"]').value = team.points;
+    if (!row) return;
     
-    const gd = team.gf - team.ga;
-    row.querySelector('.gd-cell').textContent = (gd > 0 ? '+' : '') + gd;
+    const playedInput = row.querySelector('[data-field="played"]');
+    const pointsInput = row.querySelector('[data-field="points"]');
+    const gdCell = row.querySelector('.gd-cell');
+    
+    if (playedInput) playedInput.value = team.played;
+    if (pointsInput) pointsInput.value = team.points;
+    
+    const gd = (team.gf || 0) - (team.ga || 0);
+    if (gdCell) {
+      gdCell.textContent = (gd > 0 ? '+' : '') + gd;
+      gdCell.style.color = gd > 0 ? '#28a745' : gd < 0 ? '#dc3545' : '#666';
+    }
 
-    document.getElementById('syncStatus').textContent = '🟡 Belum diurutkan (Tekan Enter atau klik di luar)';
+    updateSyncStatus('🟡', 'Belum diurutkan...', '#ffc107');
   }
 
   // === 9. HELPER: SORT DAN RE-RENDER DENGAN FOCUS PRESERVATION ===
   function sortAndReRender(lastActiveElement) {
-    // 1. Ingat elemen mana yang sedang diedit
     const activeTeamName = lastActiveElement ? lastActiveElement.dataset.team : null;
     const activeField = lastActiveElement ? lastActiveElement.dataset.field : null;
 
-    // 2. Sort array data
+    // Sort array data
     currentTeams.sort((a, b) => {
       const gdA = a.gf - a.ga;
       const gdB = b.gf - b.ga;
       if (b.points !== a.points) return b.points - a.points;
       if (gdB !== gdA) return gdB - gdA;
-      return b.gf - a.gf;
+      if (b.gf !== a.gf) return b.gf - a.gf;
+      return a.name.localeCompare(b.name);
     });
 
-    // 3. Render ulang tabel (ini akan mengubah urutan baris / idx)
     renderTable();
 
-    // 4. Kembalikan fokus ke input yang sama berdasarkan nama tim, BUKAN idx
+    // Kembalikan fokus ke input yang sama
     if (activeTeamName && activeField) {
       const newInput = document.querySelector(`input[data-team="${activeTeamName}"][data-field="${activeField}"]`);
       if (newInput) {
         newInput.focus();
-        // Opsional: letakkan kursor di akhir angka
         newInput.setSelectionRange(newInput.value.length, newInput.value.length);
       }
     }
     
-    document.getElementById('syncStatus').textContent = '🟢 Terurut & Siap Simpan';
+    updateSyncStatus('🟢', 'Terurut', '#28a745');
   }
 
   // === 10. HIGHLIGHT ZONA ===
@@ -292,81 +317,105 @@ App.FeatureLoaders.klasemen = function(userRef) {
     const rows = document.querySelectorAll('#klasemenBody tr');
     rows.forEach((row, idx) => {
       row.classList.remove('zone-ucl', 'zone-uel', 'zone-conference', 'zone-relegation');
+      row.style.background = ''; // reset
+      
       const total = rows.length;
-      if (total >= 4 && idx < 4) row.classList.add('zone-ucl');
-      else if (total >= 5 && idx === 4) row.classList.add('zone-uel');
-      else if (total >= 6 && idx === 5) row.classList.add('zone-conference');
-      else if (total >= 3 && idx >= total - 3) row.classList.add('zone-relegation');
+      if (total >= 4 && idx < 4) {
+        row.style.background = 'rgba(46, 204, 113, 0.15)'; // UCL green
+      } else if (total >= 5 && idx === 4) {
+        row.style.background = 'rgba(241, 196, 15, 0.15)'; // UEL yellow
+      } else if (total >= 6 && idx === 5) {
+        row.style.background = 'rgba(230, 126, 34, 0.15)'; // Conference orange
+      } else if (total >= 3 && idx >= total - 3) {
+        row.style.background = 'rgba(231, 76, 60, 0.15)'; // Relegation red
+      }
     });
   }
 
-  // === 11. SIMPAN KE FIRESTORE & LOCALSTORAGE ===
-  async function saveKlasemen() {
+  // === 11. ⭐ BARU: AUTO-SAVE DENGAN DEBOUNCE ===
+  function triggerAutoSave() {
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    
+    updateSyncStatus('🟡', 'Menyimpan...', '#ffc107');
+    
+    // Debounce 1 detik (save hanya setelah user berhenti input selama 1 detik)
+    autoSaveTimeout = setTimeout(() => {
+      saveToFirestore(false);
+    }, 1000);
+  }
+
+  // === 12. SIMPAN KE FIRESTORE ===
+  async function saveToFirestore(isForce = false) {
     if (!currentLeague || currentTeams.length === 0) {
-      alert('⚠️ Tidak ada data untuk disimpan!');
+      if (isForce) alert('⚠️ Tidak ada data untuk disimpan!');
       return;
     }
 
-    const btn = document.getElementById('btnSaveKlasemen');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '⏳ Menyimpan...';
+    const btn = document.getElementById('btnForceSave');
+    if (isForce && btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Menyimpan...';
+    }
 
     try {
+      const safeKey = sanitizeKey(currentLeague);
+      const docRef = db.collection('users').doc(uid).collection('klasemen').doc(safeKey);
+
       const data = {
         league: currentLeague,
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
         teams: currentTeams
       };
 
-      const safeKey = sanitizeKey(currentLeague);
-      const storageKey = `klasemen_${uid}_${safeKey}`;
+      // Set flag untuk cegah loop listener
+      isUpdatingFromCloud = true;
+      
+      await docRef.set(data);
 
-      const db = firebase.firestore();
-      await db.collection('users').doc(uid).collection('klasemen').doc(safeKey).set(data);
-
-      const localData = { ...data, lastUpdated: Date.now() };
-      localStorage.setItem(storageKey, JSON.stringify(localData));
-
-      document.getElementById('syncStatus').textContent = '🟢 Tersimpan';
-      document.getElementById('lastSaved').textContent = `✅ Tersimpan di Cloud & Lokal: ${new Date().toLocaleString('id-ID')}`;
+      const ts = new Date();
+      document.getElementById('lastSaved').textContent = `✅ Tersimpan di Cloud: ${ts.toLocaleString('id-ID')}`;
+      updateSyncStatus('🟢', 'Live (Tersinkron)', '#28a745');
+      
+      console.log(`✅ [KLASEMEN] Saved: ${currentLeague} (${currentTeams.length} teams)`);
     } catch (err) {
       console.error('Save error:', err);
-      alert('❌ Gagal menyimpan ke Cloud: ' + err.message);
+      updateSyncStatus('🔴', 'Error: ' + err.message, '#dc3545');
+      if (isForce) alert('❌ Gagal menyimpan: ' + err.message);
+      isUpdatingFromCloud = false;
     } finally {
-      btn.disabled = false;
-      btn.textContent = originalText;
+      if (isForce && btn) {
+        btn.disabled = false;
+        btn.textContent = '💾 Force Save';
+      }
     }
   }
 
-  // === 12. RESET / HAPUS DATA ===
+  // === 13. RESET / HAPUS DATA ===
   async function clearKlasemen() {
     if (!currentLeague) return;
-    if (!confirm(`⚠️ PERINGATAN: Hapus semua data klasemen untuk ${currentLeague} secara permanen?`)) return;
+    if (!confirm(`⚠️ Reset klasemen ${currentLeague}?\n\nSemua data statistik akan dihapus dan kembali ke template kosong.`)) return;
 
     try {
       const safeKey = sanitizeKey(currentLeague);
-      const storageKey = `klasemen_${uid}_${safeKey}`;
+      const docRef = db.collection('users').doc(uid).collection('klasemen').doc(safeKey);
 
-      const db = firebase.firestore();
-      await db.collection('users').doc(uid).collection('klasemen').doc(safeKey).delete();
-      localStorage.removeItem(storageKey);
+      await docRef.delete();
 
-      currentTeams = [];
-      document.getElementById('klasemenEditor').style.display = 'none';
-      document.getElementById('lastSaved').textContent = '';
-      document.getElementById('syncStatus').textContent = '⚪ Data dihapus';
+      // Reset ke template kosong
+      const teams = teamsData[currentLeague] || [];
+      currentTeams = teams.map(name => createEmptyTeam(name));
+      renderTable();
       
-      if (unsubscribeKlasemen) {
-        unsubscribeKlasemen();
-        unsubscribeKlasemen = null;
-      }
+      updateSyncStatus('⚪', 'Data direset', '#999');
+      document.getElementById('lastSaved').textContent = '🗑️ Data klasemen telah direset.';
+      
+      console.log(`🗑️ [KLASEMEN] Reset: ${currentLeague}`);
     } catch (err) {
-      alert('❌ Gagal menghapus: ' + err.message);
+      alert('❌ Gagal reset: ' + err.message);
     }
   }
 
-  // === 13. SANITIZE KEY ===
+  // === 14. SANITIZE KEY ===
   function sanitizeKey(str) {
     return str.replace(/[\.\#\$\[\]\/]/g, '_');
   }
@@ -374,14 +423,18 @@ App.FeatureLoaders.klasemen = function(userRef) {
   // === INIT ===
   loadTeams();
 
+  // Cleanup saat pindah tab
   return {
     cleanup: () => {
       if (unsubscribeKlasemen) {
         unsubscribeKlasemen();
         unsubscribeKlasemen = null;
       }
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
     }
   };
 };
 
-console.log("✅ Feature 6: Klasemen Manual (Auto-Sort & Focus Preserving) loaded");
+console.log("✅ Feature 6: Klasemen Manual (Auto-Save + Auto-Sort) loaded");
