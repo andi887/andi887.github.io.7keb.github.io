@@ -1,257 +1,198 @@
 /**
- * feature2-favorit.js - UPDATED VERSION
- * Integrasi dengan Firestore: tim_favorit/1/daftar_tim
+ * feature2-favorit.js - VERSI BARU (SIMPLE & CLEAN)
+ * Fitur: Tambah tim favorit dengan liga, auto-save ke Firestore
  */
+
 App.FeatureLoaders = App.FeatureLoaders || {};
 
-App.FeatureLoaders.favorit = function(userRef) {
+App.FeatureLoaders.favorit = function() {
   const container = document.getElementById('favorit');
   let daftarTim = [];
-  let sedangMengedit = null;
-  let teamsData = {};
-  let allTeams = [];
-  let allLigas = [];
-  let db = firebase.firestore(); // Firestore instance
+  const db = firebase.firestore();
 
-  async function loadTeams() {
-    try {
-      const res = await fetch('data/teams.json');
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      teamsData = await res.json();
-      allTeams = Object.values(teamsData).flat();
-      allLigas = Object.keys(teamsData);
-      console.log(`✅ Favorit: Loaded ${allTeams.length} teams, ${allLigas.length} liga`);
-    } catch(e) {
-      console.warn('⚠ Favorit: teams.json tidak ditemukan, pakai manual', e);
-      teamsData = {}; allTeams=[]; allLigas=[];
-    }
-  }
-
-  function normalizeLiga(input) {
-    if (!input) return '';
-    const lower = input.toLowerCase();
-    const found = allLigas.find(l => l.toLowerCase().includes(lower) || lower.includes(l.toLowerCase().split(' ')[0]));
-    if (found) return found;
-    if (lower.includes('italy') || lower.includes('italia')) return 'Serie A';
-    if (lower.includes('premier') || lower.includes('inggris') || lower.includes('epl')) return 'Premier League';
-    if (lower.includes('spanyol') || lower.includes('la liga')) return 'La Liga';
-    if (lower.includes('jerman') || lower.includes('bundes')) return 'Bundesliga';
-    if (lower.includes('prancis') || lower.includes('ligue')) return 'Ligue 1';
-    return input.split(' ').map(w=> w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
-  }
-
-  function normalizeNama(nama) {
-    return nama.split(' ').map(w=> w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ').replace(/\b\w/g, l=>l.toUpperCase());
-  }
-
-  function renderHTML() {
+  // Render HTML
+  function render() {
     container.innerHTML = `
       <h2>2. Kumpulan Tim Favorit</h2>
-      <div class="input-group" style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:15px;">
-        <div style="flex:1; min-width:200px;">
-          <label style="font-size:12px; color:#666;">Nama Tim <span style="color:red;">*</span></label><br>
-          <input type="text" id="inputTim" list="favTeamDatalist" placeholder="Contoh: Manchester United" style="width:100%; padding:8px;">
-        </div>
-        <div style="flex:1; min-width:200px;">
-          <label style="font-size:12px; color:#666;">Liga <span style="color:red;">*</span></label><br>
-          <input type="text" id="inputLiga" list="favLigaDatalist" placeholder="Contoh: Premier League" style="width:100%; padding:8px;">
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn-primary" id="btnTambahTim">➕ Tambah Tim</button>
-          <button class="btn-secondary" id="btnBatalEdit" style="display:none;"> Batal</button>
+      
+      <div style="background:#f8f9fa; padding:20px; border-radius:8px; margin-bottom:20px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+          <div style="flex:1; min-width:200px;">
+            <label style="display:block; margin-bottom:5px; font-weight:600; color:#333;">Nama Tim *</label>
+            <input type="text" id="favInputTim" placeholder="Contoh: Juventus" 
+                   style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; font-size:14px;">
+          </div>
+          
+          <div style="flex:1; min-width:200px;">
+            <label style="display:block; margin-bottom:5px; font-weight:600; color:#333;">Liga *</label>
+            <input type="text" id="favInputLiga" placeholder="Contoh: Serie A" 
+                   style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; font-size:14px;">
+          </div>
+          
+          <button id="favBtnSimpan" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+            💾 Simpan
+          </button>
         </div>
       </div>
-      <div id="editIndicator" style="display:none; background:#fff3cd; border:1px solid #ffc107; padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;">🟡 Mode Edit: <span id="editNama"></span> <small>— ubah lalu klik Simpan</small></div>
-      <datalist id="favTeamDatalist"></datalist>
-      <datalist id="favLigaDatalist"></datalist>
-      <ul id="daftarTim" class="tim-list" style="list-style:none; padding:0;"></ul>
-      <p style="font-size:11px; color:#888; margin-top:15px;">💡 Tips: Pilih tim dari autocomplete, liga akan terisi otomatis.</p>
+
+      <div id="favListContainer">
+        <p style="text-align:center; color:#999; padding:40px;">Belum ada tim favorit. Tambahkan tim di atas.</p>
+      </div>
     `;
+
     bindEvents();
-    renderDatalists();
   }
 
-  function renderDatalists() {
-    const teamDl = document.getElementById('favTeamDatalist');
-    const ligaDl = document.getElementById('favLigaDatalist');
-    if (teamDl) {
-      const sortedTeams = [...new Set(allTeams)].sort((a,b)=>a.localeCompare(b));
-      teamDl.innerHTML = sortedTeams.map(t=>`<option value="${t}">`).join('');
-    }
-    if (ligaDl) {
-      const sortedLiga = [...new Set(allLigas)].sort();
-      ligaDl.innerHTML = sortedLiga.map(l=>`<option value="${l}">`).join('');
-    }
+  // Bind events
+  function bindEvents() {
+    document.getElementById('favBtnSimpan').addEventListener('click', tambahTim);
+    
+    // Enter key untuk submit
+    document.getElementById('favInputLiga').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') tambahTim();
+    });
   }
 
-  function autoFillLiga() {
-    const inputTim = document.getElementById('inputTim');
-    const inputLiga = document.getElementById('inputLiga');
-    if (!inputTim || !inputLiga) return;
+  // Tambah tim
+  function tambahTim() {
+    const inputTim = document.getElementById('favInputTim');
+    const inputLiga = document.getElementById('favInputLiga');
+    
     const nama = inputTim.value.trim();
-    if (!nama) return;
-    for (const [liga, teams] of Object.entries(teamsData)) {
-      if (teams.some(t=> t.toLowerCase()===nama.toLowerCase())) {
-        inputLiga.value = liga;
-        console.log(`🔍 Auto-fill liga: ${nama} -> ${liga}`);
-        return;
-      }
+    const liga = inputLiga.value.trim();
+    
+    if (!nama) {
+      alert('⚠️ Nama tim harus diisi!');
+      inputTim.focus();
+      return;
+    }
+    
+    if (!liga) {
+      alert('⚠️ Liga harus diisi!');
+      inputLiga.focus();
+      return;
+    }
+    
+    // Cek apakah tim sudah ada
+    const sudahAda = daftarTim.find(t => t.nama.toLowerCase() === nama.toLowerCase());
+    if (sudahAda) {
+      alert('️ Tim "' + nama + '" sudah ada di daftar favorit!');
+      return;
+    }
+    
+    // Tambah ke array
+    const timBaru = {
+      nama: capitalizeWords(nama),
+      liga: capitalizeWords(liga)
+    };
+    
+    daftarTim.push(timBaru);
+    
+    // Simpan ke Firestore
+    simpanKeFirestore();
+    
+    // Reset form
+    inputTim.value = '';
+    inputLiga.value = '';
+    inputTim.focus();
+    
+    console.log('✅ Tim ditambahkan:', timBaru);
+  }
+
+  // Hapus tim
+  function hapusTim(index) {
+    const tim = daftarTim[index];
+    if (confirm('Hapus "' + tim.nama + '" dari favorit?')) {
+      daftarTim.splice(index, 1);
+      simpanKeFirestore();
+      console.log('🗑️ Tim dihapus:', tim.nama);
     }
   }
 
-  function renderDaftarTim() {
-    const ul = document.getElementById('daftarTim');
-    if (!ul) return;
-    ul.innerHTML = '';
-    if (daftarTim.length===0) { ul.innerHTML = '<li style="color:#999; padding:10px; text-align:center;">Belum ada tim favorit. Tambahkan di atas.</li>'; return; }
-    daftarTim.forEach((tim, idx) => {
-      const li = document.createElement('li');
-      li.className = 'tim-item';
-      li.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px; background:white;';
-      li.innerHTML = `
-        <span class="tim-name" style="font-weight:500;">${tim.nama} <small style="color:#666; background:#f3f4f6; padding:2px 6px; border-radius:10px; font-size:11px;">${tim.liga}</small></span>
-        <div class="tim-actions" style="display:flex; gap:6px;">
-          <button class="btn-small" data-act="edit" data-idx="${idx}" style="padding:4px 8px; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer;">✏ Edit</button>
-          <button class="btn-small btn-danger" data-act="hapus" data-idx="${idx}" style="padding:4px 8px; border-radius:4px; border:1px solid #fecaca; background:#fee2e2; color:#dc2626; cursor:pointer;">🗑 Hapus</button>
-        </div>`;
-      ul.appendChild(li);
-    });
-
-    ul.querySelectorAll('button[data-act="edit"]').forEach(b => {
-      b.onclick = () => {
-        const t = daftarTim[b.dataset.idx];
-        document.getElementById('inputTim').value = t.nama;
-        document.getElementById('inputLiga').value = t.liga;
-        sedangMengedit = parseInt(b.dataset.idx);
-        document.getElementById('btnTambahTim').textContent = '💾 Simpan Perubahan';
-        document.getElementById('btnBatalEdit').style.display = 'inline-block';
-        document.getElementById('editIndicator').style.display = 'block';
-        document.getElementById('editNama').textContent = t.nama;
-        document.getElementById('inputTim').focus();
-        console.log('🟡 [DEBUG] Mode Edit diaktifkan untuk index:', sedangMengedit);
-      };
-    });
-    ul.querySelectorAll('button[data-act="hapus"]').forEach(b => { b.onclick = () => hapusTim(parseInt(b.dataset.idx)); });
-  }
-
-  function resetForm() {
-    document.getElementById('inputTim').value = '';
-    document.getElementById('inputLiga').value = '';
-    sedangMengedit = null;
-    document.getElementById('btnTambahTim').textContent = '➕ Tambah Tim';
-    document.getElementById('btnBatalEdit').style.display = 'none';
-    document.getElementById('editIndicator').style.display = 'none';
-  }
-
-  //  SAVE TO FIRESTORE - tim_favorit/1/daftar_tim
-  async function simpanKeFirebase() {
+  // Simpan ke Firestore
+  async function simpanKeFirestore() {
     try {
       const docRef = db.collection('tim_favorit').doc('1');
       await docRef.set({
         daftar_tim: daftarTim
       }, { merge: true });
-      console.log('✅ [FIRESTORE] Data tersimpan ke tim_favorit/1/daftar_tim', daftarTim);
-    } catch(error) {
-      console.error('❌ [FIRESTORE] Gagal menyimpan:', error);
-      alert('Gagal menyimpan ke Firestore: ' + error.message);
+      console.log(' Tersimpan ke Firestore:', daftarTim.length, 'tim');
+      renderList();
+    } catch (error) {
+      console.error('❌ Gagal simpan ke Firestore:', error);
+      alert('Gagal menyimpan: ' + error.message);
     }
   }
 
-  // 🔥 LOAD FROM FIRESTORE - Real-time listener
-  function loadDariFirebase() {
+  // Load dari Firestore (real-time)
+  function loadDariFirestore() {
     const docRef = db.collection('tim_favorit').doc('1');
     
-    docRef.onSnapshot(doc => {
+    docRef.onSnapshot((doc) => {
       if (doc.exists) {
         const data = doc.data();
-        if (data && Array.isArray(data.daftar_tim)) {
-          daftarTim = data.daftar_tim.map(t => ({
-            nama: t.nama || t.name || 'Unknown',
-            liga: normalizeLiga(t.liga || t.league || 'Belum ditentukan')
-          }));
-          console.log('📥 [FIRESTORE] Data diterima:', daftarTim.length, 'tim');
-          renderDaftarTim();
+        if (data && data.daftar_tim && Array.isArray(data.daftar_tim)) {
+          daftarTim = data.daftar_tim;
+          console.log('📥 Load dari Firestore:', daftarTim.length, 'tim');
         } else {
-          console.log('ℹ️ [FIRESTORE] Belum ada data daftar_tim');
           daftarTim = [];
-          renderDaftarTim();
         }
       } else {
-        console.log('ℹ️ [FIRESTORE] Document tim_favorit/1 belum ada');
         daftarTim = [];
-        renderDaftarTim();
+        console.log('ℹ️ Document belum ada di Firestore');
       }
-    }, error => {
-      console.error('❌ [FIRESTORE] Error listening:', error);
+      renderList();
+    }, (error) => {
+      console.error('❌ Error listening Firestore:', error);
     });
   }
 
-  function tambahTim() {
-    const inputTim = document.getElementById('inputTim');
-    const inputLiga = document.getElementById('inputLiga');
-    let nama = inputTim.value.trim();
-    let liga = inputLiga.value.trim();
+  // Render list tim
+  function renderList() {
+    const container = document.getElementById('favListContainer');
     
-    if (!nama) { alert("⚠️ Nama tim tidak boleh kosong!"); inputTim.focus(); return; }
-    if (!liga) { alert("⚠️ Liga tidak boleh kosong! Silakan pilih atau ketik liga."); inputLiga.focus(); return; }
+    if (!container) return;
     
-    nama = normalizeNama(nama);
-    liga = normalizeLiga(liga);
-    
-    const sudahAda = daftarTim.findIndex(t => t.nama.toLowerCase() === nama.toLowerCase());
-    
-    if (sedangMengedit !== null) {
-      // Edit mode
-      daftarTim[sedangMengedit] = { nama, liga };
-      console.log('🟡 [UPDATE] Tim diperbarui:', sedangMengedit, nama, liga);
-    } else {
-      // Tambah baru
-      if (sudahAda !== -1) { 
-        alert('⚠️ Tim sudah ada di daftar favorit! Gunakan tombol Edit jika ingin mengubah liga.'); 
-        return; 
-      }
-      daftarTim.push({ nama, liga });
-      console.log('🟢 [TAMBAH] Tim baru:', nama, liga);
+    if (daftarTim.length === 0) {
+      container.innerHTML = '<p style="text-align:center; color:#999; padding:40px;">Belum ada tim favorit. Tambahkan tim di atas.</p>';
+      return;
     }
     
-    resetForm();
-    renderDaftarTim();
-    simpanKeFirebase(); // Auto-save ke Firestore
-  }
-
-  function hapusTim(idx) {
-    if (!confirm(`Hapus ${daftarTim[idx].nama} dari favorit?`)) return;
-    console.log('🔴 [HAPUS] Menghapus tim index:', idx, daftarTim[idx].nama);
-    daftarTim.splice(idx, 1);
-    if (sedangMengedit === idx) resetForm();
-    renderDaftarTim();
-    simpanKeFirebase(); // Auto-save ke Firestore
-  }
-
-  function bindEvents() {
-    document.getElementById('btnTambahTim').onclick = tambahTim;
-    document.getElementById('btnBatalEdit').onclick = resetForm;
-    const inputTim = document.getElementById('inputTim');
-    if (inputTim) {
-      inputTim.addEventListener('change', autoFillLiga);
-      inputTim.addEventListener('input', autoFillLiga);
-      inputTim.addEventListener('blur', () => setTimeout(autoFillLiga, 200));
-    }
+    let html = '<div style="display:grid; gap:10px;">';
     
-    // Enter key untuk submit
-    document.getElementById('inputLiga')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') tambahTim();
+    daftarTim.forEach((tim, index) => {
+      html += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:white; border:1px solid #e0e0e0; border-radius:6px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+          <div>
+            <strong style="font-size:16px; color:#333;">${tim.nama}</strong>
+            <span style="margin-left:10px; padding:4px 10px; background:#e3f2fd; color:#1976d2; border-radius:12px; font-size:12px; font-weight:600;">${tim.liga}</span>
+          </div>
+          <button onclick="window.favHapusTim(${index})" 
+                  style="padding:6px 12px; background:#ffebee; color:#c62828; border:none; border-radius:4px; cursor:pointer; font-size:13px;">
+            🗑 Hapus
+          </button>
+        </div>
+      `;
     });
+    
+    html += '</div>';
+    container.innerHTML = html;
+    
+    // Expose function ke window untuk onclick
+    window.favHapusTim = hapusTim;
+  }
+
+  // Helper: Capitalize words
+  function capitalizeWords(str) {
+    return str.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
   }
 
   // INIT
-  (async()=>{
-    console.log('🚀 [FAVORIT] Initializing...');
-    renderHTML();
-    await loadTeams();
-    renderDatalists();
-    loadDariFirebase(); // Load real-time dari Firestore
-    console.log('✅ [FAVORIT] Feature loaded - Listening to tim_favorit/1/daftar_tim');
-  })();
+  console.log('🚀 Feature Favorit loaded');
+  render();
+  loadDariFirestore();
 };
-console.log("✅ Feature 2: Favorit loaded - FIRESTORE INTEGRATED");
+
+console.log('✅ feature2-favorit.js loaded');
