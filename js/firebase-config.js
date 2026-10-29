@@ -5,15 +5,15 @@
  */
 
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC5knp2eCkE4pzuNRodN5SgGhaq_H416vE",
-  authDomain: "parlaypribadi.firebaseapp.com",
-  databaseURL: "https://parlaypribadi-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "parlaypribadi",
-  storageBucket: "parlaypribadi.firebasestorage.app",
-  messagingSenderId: "42241144949",
-  appId: "1:42241144949:web:1bbc9c022c717d4643203c"
+ const firebaseConfig = {
+  apiKey: "AIzaSyAOf4bjjOQPCgp3kdioCSwEmNq2GNksv04",
+  authDomain: "ber3lebihbaik.firebaseapp.com",
+  databaseURL: "https://ber3lebihbaik-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ber3lebihbaik",
+  storageBucket: "ber3lebihbaik.firebasestorage.app",
+  messagingSenderId: "819172531554",
+  appId: "1:819172531554:web:6d3aa2bd5244481271a03b"
 };
-
 // Inisialisasi Firebase
 firebase.initializeApp(FIREBASE_CONFIG);
 
