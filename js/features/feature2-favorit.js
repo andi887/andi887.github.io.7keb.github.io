@@ -1,6 +1,5 @@
 /**
- * feature2-favorit.js - WITH DIRECT FIRESTORE ACCESS
- * Fallback ke Firestore langsung jika App.Service gagal
+ * feature2-favorit.js - WITH TIMEOUT & PERMISSION CHECK
  */
 
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -8,19 +7,27 @@ App.FeatureLoaders = App.FeatureLoaders || {};
 App.FeatureLoaders.favorit = function() {
   const container = document.getElementById('favorit');
   let daftarTim = [];
-  
+  const db = App.Service.db;
   const FIRESTORE_PATH = 'tim_favorit/1';
   const FIELD_NAME = 'daftar_tim';
-  
-  // Dapatkan Firestore instance
-  const db = App.Service.db;
 
-  console.log(' [FAVORIT] Path:', FIRESTORE_PATH);
-  console.log('🔥 Firestore instance:', db ? 'OK' : 'NULL');
+  console.log('🚀 [FAVORIT] TIMEOUT VERSION loaded');
+  console.log(' Firestore:', db ? 'OK' : 'NULL');
 
   function render() {
     container.innerHTML = `
       <h2>2. Kumpulan Tim Favorit</h2>
+      
+      <div style="background:#fff3cd; border:2px solid #ffc107; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <strong style="color:#856404;">⚠️ PENTING: Firestore Rules</strong>
+        <p style="margin:10px 0; font-size:13px;">
+          Jika data tidak tersimpan, buka Firebase Console → Database → Rules<br>
+          Ganti rules menjadi:<br>
+          <code style="background:#f8f9fa; padding:5px; display:block; margin:5px 0;">
+            allow read, write: if true;
+          </code>
+        </p>
+      </div>
       
       <div style="background:#f8f9fa; padding:20px; border-radius:8px; margin-bottom:20px;">
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
@@ -65,25 +72,36 @@ App.FeatureLoaders.favorit = function() {
     if (!liga) { alert('⚠️ Liga harus diisi!'); return; }
     
     const sudahAda = daftarTim.find(t => t.nama.toLowerCase() === nama.toLowerCase());
-    if (sudahAda) { alert('️ Tim sudah ada!'); return; }
+    if (sudahAda) { alert('Tim sudah ada!'); return; }
     
     const timBaru = { nama: capitalize(nama), liga: capitalize(liga) };
     daftarTim.push(timBaru);
     
-    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan...</span>';
+    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan (max 10 detik)...</span>';
     
-    simpanKeFirestore()
+    // Gunakan timeout
+    const writePromise = simpanKeFirestore();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('TIMEOUT: Write operation > 10 detik. Cek Firestore Rules!')), 10000);
+    });
+    
+    Promise.race([writePromise, timeoutPromise])
       .then(() => {
-        statusDiv.innerHTML = '<span style="color:#28a745;">✅ Tersimpan!</span>';
+        statusDiv.innerHTML = '<span style="color:#28a745;">✅ Tersimpan ke server!</span>';
         inputTim.value = '';
         inputLiga.value = '';
         setTimeout(() => statusDiv.innerHTML = '', 3000);
       })
       .catch((error) => {
-        statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal</span>';
+        statusDiv.innerHTML = '<span style="color:#dc3545;"> Gagal: ' + error.message + '</span>';
         daftarTim.pop();
         renderList();
-        alert('Gagal:\n' + error.message);
+        
+        if (error.message.includes('TIMEOUT')) {
+          alert(' TIMEOUT!\n\nWrite operation tidak selesai dalam 10 detik.\n\nPenyebab kemungkinan:\n1. Firestore Rules memblokir write\n2. Koneksi internet lambat/putus\n\nSolusi:\n- Buka Firebase Console → Database → Rules\n- Ganti rules: allow read, write: if true;\n- Publish rules');
+        } else {
+          alert('❌ Gagal:\n' + error.message);
+        }
       });
   }
 
@@ -101,34 +119,31 @@ App.FeatureLoaders.favorit = function() {
     
     const docRef = db.collection('tim_favorit').doc('1');
     
-    try {
-      // LANGSUNG KE FIRESTORE (bypass App.Service)
-      console.log('🔥 Menulis ke Firestore...');
+    console.log('🔥 Menulis ke Firestore...');
+    
+    const result = await docRef.set({
+      [FIELD_NAME]: daftarTim
+    }, { merge: true });
+    
+    console.log('✅ [SAVE] Write berhasil!');
+    console.log('🔍 Verifikasi...');
+    
+    // Verifikasi dari server
+    const snapshot = await docRef.get({ source: 'server' });
+    
+    if (snapshot.exists) {
+      const data = snapshot.data();
+      console.log('✅ [VERIFY] Data di server:', data);
       
-      await docRef.set({
-        [FIELD_NAME]: daftarTim
-      }, { merge: true });
-      
-      console.log('✅ [SAVE] Write berhasil!');
-      
-      // Verifikasi
-      console.log('🔍 Verifikasi...');
-      const snapshot = await docRef.get({ source: 'server' });
-      
-      if (snapshot.exists) {
-        const data = snapshot.data();
-        console.log('✅ [VERIFY] Data di server:', data);
+      if (data[FIELD_NAME] && data[FIELD_NAME].length === daftarTim.length) {
+        console.log('✅ [VERIFY] Data cocok!');
         renderList();
-        return true;
+        return result;
       } else {
-        throw new Error('Document tidak ada setelah write!');
+        throw new Error('Data tidak cocok setelah write!');
       }
-      
-    } catch (error) {
-      console.error('❌ [SAVE] Error:', error);
-      console.error('❌ Code:', error.code);
-      console.error('❌ Message:', error.message);
-      throw error;
+    } else {
+      throw new Error('Document tidak ada setelah write!');
     }
   }
 
@@ -140,8 +155,7 @@ App.FeatureLoaders.favorit = function() {
       console.log(' [SNAPSHOT]', {
         exists: doc.exists,
         fromCache: doc.metadata.fromCache,
-        hasPendingWrites: doc.metadata.hasPendingWrites,
-        data: doc.data()
+        hasPendingWrites: doc.metadata.hasPendingWrites
       });
       
       if (doc.exists && doc.data()[FIELD_NAME]) {
@@ -190,9 +204,8 @@ App.FeatureLoaders.favorit = function() {
   }
 
   // INIT
-  console.log('🚀 [FAVORIT] DIRECT FIRESTORE VERSION loaded');
   render();
   loadDariFirestore();
 };
 
-console.log('✅ feature2-favorit.js DIRECT FIRESTORE VERSION');
+console.log('✅ feature2-favorit.js TIMEOUT VERSION loaded');
