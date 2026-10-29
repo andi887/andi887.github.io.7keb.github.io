@@ -1,6 +1,6 @@
 /**
- * feature2-favorit.js - VERSI BARU (SIMPLE & CLEAN)
- * Fitur: Tambah tim favorit dengan liga, auto-save ke Firestore
+ * feature2-favorit.js - VERSI DEBUG & ROBUST
+ * Dengan logging detail untuk troubleshoot
  */
 
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -8,7 +8,23 @@ App.FeatureLoaders = App.FeatureLoaders || {};
 App.FeatureLoaders.favorit = function() {
   const container = document.getElementById('favorit');
   let daftarTim = [];
-  const db = firebase.firestore();
+  
+  // Cek Firebase SDK
+  let db;
+  try {
+    if (typeof firebase !== 'undefined' && firebase.firestore) {
+      db = firebase.firestore();
+      console.log('✅ Firebase Firestore tersedia');
+    } else {
+      console.error('❌ Firebase SDK tidak tersedia!');
+      alert('Firebase SDK tidak ter-load. Periksa konfigurasi Firebase.');
+      return;
+    }
+  } catch (e) {
+    console.error('❌ Error inisialisasi Firestore:', e);
+    alert('Gagal inisialisasi Firestore: ' + e.message);
+    return;
+  }
 
   // Render HTML
   function render() {
@@ -33,6 +49,7 @@ App.FeatureLoaders.favorit = function() {
             💾 Simpan
           </button>
         </div>
+        <div id="favStatus" style="margin-top:10px; font-size:13px; color:#666;"></div>
       </div>
 
       <div id="favListContainer">
@@ -47,7 +64,6 @@ App.FeatureLoaders.favorit = function() {
   function bindEvents() {
     document.getElementById('favBtnSimpan').addEventListener('click', tambahTim);
     
-    // Enter key untuk submit
     document.getElementById('favInputLiga').addEventListener('keypress', function(e) {
       if (e.key === 'Enter') tambahTim();
     });
@@ -57,6 +73,7 @@ App.FeatureLoaders.favorit = function() {
   function tambahTim() {
     const inputTim = document.getElementById('favInputTim');
     const inputLiga = document.getElementById('favInputLiga');
+    const statusDiv = document.getElementById('favStatus');
     
     const nama = inputTim.value.trim();
     const liga = inputLiga.value.trim();
@@ -73,14 +90,13 @@ App.FeatureLoaders.favorit = function() {
       return;
     }
     
-    // Cek apakah tim sudah ada
+    // Cek duplikat
     const sudahAda = daftarTim.find(t => t.nama.toLowerCase() === nama.toLowerCase());
     if (sudahAda) {
-      alert('️ Tim "' + nama + '" sudah ada di daftar favorit!');
+      alert('⚠️ Tim "' + nama + '" sudah ada di daftar favorit!');
       return;
     }
     
-    // Tambah ke array
     const timBaru = {
       nama: capitalizeWords(nama),
       liga: capitalizeWords(liga)
@@ -88,15 +104,33 @@ App.FeatureLoaders.favorit = function() {
     
     daftarTim.push(timBaru);
     
-    // Simpan ke Firestore
-    simpanKeFirestore();
+    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan ke Firestore...</span>';
     
-    // Reset form
-    inputTim.value = '';
-    inputLiga.value = '';
-    inputTim.focus();
-    
-    console.log('✅ Tim ditambahkan:', timBaru);
+    // Simpan ke Firestore dengan error handling detail
+    simpanKeFirestore()
+      .then(() => {
+        statusDiv.innerHTML = '<span style="color:#28a745;">✅ Berhasil tersimpan ke Firestore!</span>';
+        console.log('✅ [SUKSES] Tim tersimpan:', timBaru);
+        
+        // Reset form
+        inputTim.value = '';
+        inputLiga.value = '';
+        inputTim.focus();
+        
+        setTimeout(() => {
+          statusDiv.innerHTML = '';
+        }, 3000);
+      })
+      .catch((error) => {
+        statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal simpan: ' + error.message + '</span>';
+        console.error(' [GAGAL] Error detail:', error);
+        
+        // Hapus dari array lokal karena gagal simpan
+        daftarTim.pop();
+        renderList();
+        
+        alert('Gagal menyimpan ke Firestore:\n\n' + error.message + '\n\nCek console untuk detail.');
+      });
   }
 
   // Hapus tim
@@ -104,46 +138,94 @@ App.FeatureLoaders.favorit = function() {
     const tim = daftarTim[index];
     if (confirm('Hapus "' + tim.nama + '" dari favorit?')) {
       daftarTim.splice(index, 1);
-      simpanKeFirestore();
-      console.log('🗑️ Tim dihapus:', tim.nama);
+      
+      const statusDiv = document.getElementById('favStatus');
+      if (statusDiv) {
+        statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menghapus dari Firestore...</span>';
+      }
+      
+      simpanKeFirestore()
+        .then(() => {
+          console.log('️ [SUKSES] Tim dihapus:', tim.nama);
+          if (statusDiv) {
+            statusDiv.innerHTML = '<span style="color:#28a745;">✅ Berhasil dihapus dari Firestore!</span>';
+            setTimeout(() => {
+              statusDiv.innerHTML = '';
+            }, 3000);
+          }
+        })
+        .catch((error) => {
+          console.error('❌ [GAGAL] Hapus error:', error);
+          if (statusDiv) {
+            statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal hapus: ' + error.message + '</span>';
+          }
+          alert('Gagal menghapus dari Firestore:\n\n' + error.message);
+        });
     }
   }
 
-  // Simpan ke Firestore
+  // Simpan ke Firestore - DENGAN ERROR HANDLING DETAIL
   async function simpanKeFirestore() {
     try {
+      console.log(' [FIRESTORE] Mencoba menyimpan...');
+      console.log(' [FIRESTORE] Path: tim_favorit/1');
+      console.log('📤 [FIRESTORE] Data:', JSON.stringify(daftarTim, null, 2));
+      
       const docRef = db.collection('tim_favorit').doc('1');
-      await docRef.set({
+      
+      // Coba set dengan merge
+      const result = await docRef.set({
         daftar_tim: daftarTim
       }, { merge: true });
-      console.log(' Tersimpan ke Firestore:', daftarTim.length, 'tim');
+      
+      console.log('✅ [FIRESTORE] Berhasil simpan! Result:', result);
+      console.log('✅ [FIRESTORE] Timestamp:', new Date().toISOString());
+      
       renderList();
+      return result;
+      
     } catch (error) {
-      console.error('❌ Gagal simpan ke Firestore:', error);
-      alert('Gagal menyimpan: ' + error.message);
+      console.error('❌ [FIRESTORE] Error saat simpan:', error);
+      console.error('❌ [FIRESTORE] Error code:', error.code);
+      console.error('❌ [FIRESTORE] Error message:', error.message);
+      console.error(' [FIRESTORE] Error stack:', error.stack);
+      throw error;
     }
   }
 
   // Load dari Firestore (real-time)
   function loadDariFirestore() {
+    console.log('👂 [FIRESTORE] Memulai listener...');
     const docRef = db.collection('tim_favorit').doc('1');
     
     docRef.onSnapshot((doc) => {
+      console.log('📥 [FIRESTORE] Snapshot diterima');
+      console.log(' [FIRESTORE] exists:', doc.exists);
+      console.log('📥 [FIRESTORE] metadata:', doc.metadata);
+      
       if (doc.exists) {
         const data = doc.data();
+        console.log('📥 [FIRESTORE] Data:', data);
+        
         if (data && data.daftar_tim && Array.isArray(data.daftar_tim)) {
           daftarTim = data.daftar_tim;
-          console.log('📥 Load dari Firestore:', daftarTim.length, 'tim');
+          console.log('📥 [FIRESTORE] Load berhasil:', daftarTim.length, 'tim');
         } else {
+          console.warn('⚠️ [FIRESTORE] Field daftar_tim tidak ada atau bukan array');
           daftarTim = [];
         }
       } else {
+        console.log('ℹ️ [FIRESTORE] Document belum ada');
         daftarTim = [];
-        console.log('ℹ️ Document belum ada di Firestore');
       }
+      
       renderList();
     }, (error) => {
-      console.error('❌ Error listening Firestore:', error);
+      console.error('❌ [FIRESTORE] Error listener:', error);
+      console.error('❌ [FIRESTORE] Error code:', error.code);
+      console.error('❌ [FIRESTORE] Error message:', error.message);
+      
+      alert('Gagal load data dari Firestore:\n\n' + error.message + '\n\nCek console untuk detail.');
     });
   }
 
@@ -178,7 +260,6 @@ App.FeatureLoaders.favorit = function() {
     html += '</div>';
     container.innerHTML = html;
     
-    // Expose function ke window untuk onclick
     window.favHapusTim = hapusTim;
   }
 
@@ -190,9 +271,9 @@ App.FeatureLoaders.favorit = function() {
   }
 
   // INIT
-  console.log('🚀 Feature Favorit loaded');
+  console.log('🚀 [FAVORIT] Feature loaded');
   render();
   loadDariFirestore();
 };
 
-console.log('✅ feature2-favorit.js loaded');
+console.log('✅ feature2-favorit.js loaded - DEBUG VERSION');
