@@ -1,7 +1,6 @@
 /**
- * feature2-favorit.js - FINAL WORKING VERSION
- * Menggunakan App.Service yang sudah ada
- * Path: tim_favorit/1 (GLOBAL)
+ * feature2-favorit.js - WITH DIRECT FIRESTORE ACCESS
+ * Fallback ke Firestore langsung jika App.Service gagal
  */
 
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -10,11 +9,14 @@ App.FeatureLoaders.favorit = function() {
   const container = document.getElementById('favorit');
   let daftarTim = [];
   
-  // PATH YANG BENAR: tim_favorit/1 (global, bukan per user)
   const FIRESTORE_PATH = 'tim_favorit/1';
   const FIELD_NAME = 'daftar_tim';
+  
+  // Dapatkan Firestore instance
+  const db = App.Service.db;
 
-  console.log('🎯 [FAVORIT] Menggunakan path:', FIRESTORE_PATH);
+  console.log(' [FAVORIT] Path:', FIRESTORE_PATH);
+  console.log('🔥 Firestore instance:', db ? 'OK' : 'NULL');
 
   function render() {
     container.innerHTML = `
@@ -39,9 +41,7 @@ App.FeatureLoaders.favorit = function() {
         <div id="favStatus" style="margin-top:10px; font-size:13px;"></div>
       </div>
 
-      <div id="favListContainer">
-        <p style="text-align:center; color:#999; padding:40px;">Belum ada tim favorit.</p>
-      </div>
+      <div id="favListContainer"></div>
     `;
     bindEvents();
   }
@@ -61,79 +61,99 @@ App.FeatureLoaders.favorit = function() {
     const nama = inputTim.value.trim();
     const liga = inputLiga.value.trim();
     
-    if (!nama) { alert('️ Nama tim harus diisi!'); inputTim.focus(); return; }
-    if (!liga) { alert('⚠️ Liga harus diisi!'); inputLiga.focus(); return; }
+    if (!nama) { alert('Nama tim harus diisi!'); return; }
+    if (!liga) { alert('⚠️ Liga harus diisi!'); return; }
     
     const sudahAda = daftarTim.find(t => t.nama.toLowerCase() === nama.toLowerCase());
-    if (sudahAda) { alert('⚠️ Tim sudah ada di daftar!'); return; }
+    if (sudahAda) { alert('️ Tim sudah ada!'); return; }
     
     const timBaru = { nama: capitalize(nama), liga: capitalize(liga) };
     daftarTim.push(timBaru);
     
-    statusDiv.innerHTML = '<span style="color:#007bff;"> Menyimpan...</span>';
+    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan...</span>';
     
-    // SIMPAN MENGGUNAKAN App.Service
     simpanKeFirestore()
       .then(() => {
         statusDiv.innerHTML = '<span style="color:#28a745;">✅ Tersimpan!</span>';
         inputTim.value = '';
         inputLiga.value = '';
-        inputTim.focus();
         setTimeout(() => statusDiv.innerHTML = '', 3000);
       })
       .catch((error) => {
-        statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal: ' + error.message + '</span>';
-        daftarTim.pop(); // Hapus dari array lokal
+        statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal</span>';
+        daftarTim.pop();
         renderList();
-        alert('Gagal menyimpan:\n\n' + error.message);
+        alert('Gagal:\n' + error.message);
       });
   }
 
   function hapusTim(index) {
-    const tim = daftarTim[index];
-    if (confirm('Hapus "' + tim.nama + '" dari favorit?')) {
+    if (confirm('Hapus "' + daftarTim[index].nama + '"?')) {
       daftarTim.splice(index, 1);
-      simpanKeFirestore().catch(e => alert('Gagal hapus: ' + e.message));
+      simpanKeFirestore().catch(e => alert('Gagal: ' + e.message));
     }
   }
 
   async function simpanKeFirestore() {
-    console.log(' [SAVE] Menyimpan ke Firestore...');
-    console.log('📤 Path:', FIRESTORE_PATH);
-    console.log(' Field:', FIELD_NAME);
-    console.log(' Data:', JSON.stringify(daftarTim, null, 2));
+    console.log(' [SAVE] Mulai simpan...');
+    console.log('📍 Path:', FIRESTORE_PATH);
+    console.log('📦 Data:', daftarTim);
     
-    // STRATEGI: Simpan object dengan field 'daftar_tim'
-    const dataToSave = {};
-    dataToSave[FIELD_NAME] = daftarTim;
+    const docRef = db.collection('tim_favorit').doc('1');
     
     try {
-      await App.Service.saveData(FIRESTORE_PATH, dataToSave);
-      console.log('✅ [SAVE] Berhasil!');
-      renderList();
+      // LANGSUNG KE FIRESTORE (bypass App.Service)
+      console.log('🔥 Menulis ke Firestore...');
+      
+      await docRef.set({
+        [FIELD_NAME]: daftarTim
+      }, { merge: true });
+      
+      console.log('✅ [SAVE] Write berhasil!');
+      
+      // Verifikasi
+      console.log('🔍 Verifikasi...');
+      const snapshot = await docRef.get({ source: 'server' });
+      
+      if (snapshot.exists) {
+        const data = snapshot.data();
+        console.log('✅ [VERIFY] Data di server:', data);
+        renderList();
+        return true;
+      } else {
+        throw new Error('Document tidak ada setelah write!');
+      }
+      
     } catch (error) {
-      console.error('❌ [SAVE] Gagal:', error);
+      console.error('❌ [SAVE] Error:', error);
+      console.error('❌ Code:', error.code);
+      console.error('❌ Message:', error.message);
       throw error;
     }
   }
 
   function loadDariFirestore() {
-    console.log('👂 [LOAD] Listening ke Firestore...');
-    console.log('👂 Path:', FIRESTORE_PATH);
+    console.log('👂 [LOAD] Listening...');
+    const docRef = db.collection('tim_favorit').doc('1');
     
-    // LISTEN MENGGUNAKAN App.Service
-    App.Service.loadData(FIRESTORE_PATH, (snapshot) => {
-      console.log('📥 [LOAD] Data diterima:', snapshot);
+    docRef.onSnapshot({ includeMetadataChanges: true }, (doc) => {
+      console.log(' [SNAPSHOT]', {
+        exists: doc.exists,
+        fromCache: doc.metadata.fromCache,
+        hasPendingWrites: doc.metadata.hasPendingWrites,
+        data: doc.data()
+      });
       
-      if (snapshot && snapshot[FIELD_NAME] && Array.isArray(snapshot[FIELD_NAME])) {
-        daftarTim = snapshot[FIELD_NAME];
-        console.log('📥 [LOAD] Berhasil load', daftarTim.length, 'tim');
+      if (doc.exists && doc.data()[FIELD_NAME]) {
+        daftarTim = doc.data()[FIELD_NAME];
+        console.log(' Load', daftarTim.length, 'tim');
       } else {
-        console.log('ℹ️ [LOAD] Belum ada data');
         daftarTim = [];
       }
       
       renderList();
+    }, (error) => {
+      console.error('❌ [LISTENER] Error:', error);
     });
   }
 
@@ -151,10 +171,10 @@ App.FeatureLoaders.favorit = function() {
       html += `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:white; border:1px solid #e0e0e0; border-radius:6px;">
           <div>
-            <strong style="font-size:16px;">${tim.nama}</strong>
-            <span style="margin-left:10px; padding:4px 10px; background:#e3f2fd; color:#1976d2; border-radius:12px; font-size:12px; font-weight:600;">${tim.liga}</span>
+            <strong>${tim.nama}</strong>
+            <span style="margin-left:10px; padding:4px 10px; background:#e3f2fd; color:#1976d2; border-radius:12px; font-size:12px;">${tim.liga}</span>
           </div>
-          <button onclick="window.favHapusTim(${index})" style="padding:6px 12px; background:#ffebee; color:#c62828; border:none; border-radius:4px; cursor:pointer; font-size:13px;">
+          <button onclick="window.favHapusTim(${index})" style="padding:6px 12px; background:#ffebee; color:#c62828; border:none; border-radius:4px; cursor:pointer;">
             🗑 Hapus
           </button>
         </div>
@@ -170,12 +190,9 @@ App.FeatureLoaders.favorit = function() {
   }
 
   // INIT
-  console.log('🚀 [FAVORIT] FINAL VERSION loaded');
-  console.log('📊 App.Service tersedia:', !!App.Service);
-  console.log('📊 App.Service.db tersedia:', !!App.Service.db);
-  
+  console.log('🚀 [FAVORIT] DIRECT FIRESTORE VERSION loaded');
   render();
   loadDariFirestore();
 };
 
-console.log('✅ feature2-favorit.js FINAL WORKING VERSION');
+console.log('✅ feature2-favorit.js DIRECT FIRESTORE VERSION');
