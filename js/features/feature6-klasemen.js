@@ -1,5 +1,5 @@
 /**
- * feature6-klasemen.js (Versi 4.0 - Auto-Save ke Firestore)
+ * feature6-klasemen.js (Versi 4.1 - Auto-Save + Fix setSelectionRange Error)
  * Fitur 6: Klasemen Manual dengan Pengurutan Otomatis & Auto-Save Cloud
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -10,10 +10,10 @@ App.FeatureLoaders.klasemen = function(userRef) {
   let currentLeague = '';
   let currentTeams = [];
   const uid = App.Auth.currentUser.uid;
-  const db = App.Service.db; // ⭐ Gunakan instance dari App.Service
+  const db = App.Service.db;
   let unsubscribeKlasemen = null;
-  let autoSaveTimeout = null; // ⭐ BARU: untuk debounce auto-save
-  let isUpdatingFromCloud = false; // ⭐ BARU: flag untuk cegah loop
+  let autoSaveTimeout = null;
+  let isUpdatingFromCloud = false;
 
   // === RENDER UI ===
   container.innerHTML = `
@@ -105,16 +105,12 @@ App.FeatureLoaders.klasemen = function(userRef) {
     const safeKey = sanitizeKey(league);
     const teams = teamsData[league] || [];
 
-    // Default: template kosong
     currentTeams = teams.map(name => createEmptyTeam(name));
 
     document.getElementById('editorTitle').textContent = `🏆 ${league}`;
     document.getElementById('klasemenEditor').style.display = 'block';
     
-    // Render awal (template kosong)
     renderTable();
-    
-    // Setup listener real-time dari Firestore
     setupRealtimeListener(safeKey);
   }
 
@@ -126,7 +122,6 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
     unsubscribeKlasemen = docRef.onSnapshot((doc) => {
       if (isUpdatingFromCloud) {
-        // Skip jika update berasal dari diri sendiri (cegah loop)
         isUpdatingFromCloud = false;
         return;
       }
@@ -177,7 +172,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
       return a.name.localeCompare(b.name);
     });
 
-    // Re-calculate Main, Poin, SG untuk semua tim (memastikan konsisten)
+    // Re-calculate Main, Poin untuk semua tim
     currentTeams.forEach(team => {
       team.played = (team.won || 0) + (team.draw || 0) + (team.lost || 0);
       team.points = ((team.won || 0) * 3) + ((team.draw || 0) * 1);
@@ -206,22 +201,18 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
     // === BIND INPUT EVENTS ===
     tbody.querySelectorAll('.stat-input').forEach(input => {
-      // 1. Update instan saat mengetik
       input.addEventListener('input', (e) => {
         updateTeamDataInstant(e.target);
       });
 
-      // 2. Auto-sort + auto-save saat selesai mengedit (blur)
       input.addEventListener('blur', (e) => {
         sortAndReRender(e.target);
-        triggerAutoSave(); // ⭐ BARU: auto-save setelah blur
+        triggerAutoSave();
       });
       
-      // 3. Auto-sort + auto-save saat Enter
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
-          // Pindah ke input berikutnya di baris yang sama (lebih UX friendly)
           const allInputs = Array.from(tbody.querySelectorAll('.stat-input:not([readonly])'));
           const currentIdx = allInputs.indexOf(e.target);
           if (currentIdx < allInputs.length - 1) {
@@ -241,7 +232,7 @@ App.FeatureLoaders.klasemen = function(userRef) {
         if (confirm(`Hapus ${teamName} dari klasemen?`)) {
           currentTeams = currentTeams.filter(t => t.name !== teamName);
           renderTable();
-          triggerAutoSave(); // ⭐ Auto-save setelah hapus
+          triggerAutoSave();
         }
       };
     });
@@ -259,11 +250,9 @@ App.FeatureLoaders.klasemen = function(userRef) {
     if (!team) return;
 
     team[field] = val;
-    // Auto-calculate
     team.played = (team.won || 0) + (team.draw || 0) + (team.lost || 0);
     team.points = ((team.won || 0) * 3) + ((team.draw || 0) * 1);
 
-    // Update tampilan baris ini saja
     const row = el.closest('tr');
     if (!row) return;
     
@@ -288,7 +277,6 @@ App.FeatureLoaders.klasemen = function(userRef) {
     const activeTeamName = lastActiveElement ? lastActiveElement.dataset.team : null;
     const activeField = lastActiveElement ? lastActiveElement.dataset.field : null;
 
-    // Sort array data
     currentTeams.sort((a, b) => {
       const gdA = a.gf - a.ga;
       const gdB = b.gf - b.ga;
@@ -300,12 +288,14 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
     renderTable();
 
-    // Kembalikan fokus ke input yang sama
+    // ⚠️ PERBAIKAN VERSI 4.1:
+    // HANYA focus() - TIDAK pakai setSelectionRange()
+    // karena input type="number" tidak mendukung setSelectionRange
+    // (penyebab InvalidStateError di versi sebelumnya)
     if (activeTeamName && activeField) {
       const newInput = document.querySelector(`input[data-team="${activeTeamName}"][data-field="${activeField}"]`);
       if (newInput) {
         newInput.focus();
-        newInput.setSelectionRange(newInput.value.length, newInput.value.length);
       }
     }
     
@@ -316,29 +306,27 @@ App.FeatureLoaders.klasemen = function(userRef) {
   function applyZoneHighlighting() {
     const rows = document.querySelectorAll('#klasemenBody tr');
     rows.forEach((row, idx) => {
-      row.classList.remove('zone-ucl', 'zone-uel', 'zone-conference', 'zone-relegation');
-      row.style.background = ''; // reset
+      row.style.background = '';
       
       const total = rows.length;
       if (total >= 4 && idx < 4) {
-        row.style.background = 'rgba(46, 204, 113, 0.15)'; // UCL green
+        row.style.background = 'rgba(46, 204, 113, 0.15)';
       } else if (total >= 5 && idx === 4) {
-        row.style.background = 'rgba(241, 196, 15, 0.15)'; // UEL yellow
+        row.style.background = 'rgba(241, 196, 15, 0.15)';
       } else if (total >= 6 && idx === 5) {
-        row.style.background = 'rgba(230, 126, 34, 0.15)'; // Conference orange
+        row.style.background = 'rgba(230, 126, 34, 0.15)';
       } else if (total >= 3 && idx >= total - 3) {
-        row.style.background = 'rgba(231, 76, 60, 0.15)'; // Relegation red
+        row.style.background = 'rgba(231, 76, 60, 0.15)';
       }
     });
   }
 
-  // === 11. ⭐ BARU: AUTO-SAVE DENGAN DEBOUNCE ===
+  // === 11. AUTO-SAVE DENGAN DEBOUNCE ===
   function triggerAutoSave() {
     if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
     
     updateSyncStatus('🟡', 'Menyimpan...', '#ffc107');
     
-    // Debounce 1 detik (save hanya setelah user berhenti input selama 1 detik)
     autoSaveTimeout = setTimeout(() => {
       saveToFirestore(false);
     }, 1000);
@@ -367,7 +355,6 @@ App.FeatureLoaders.klasemen = function(userRef) {
         teams: currentTeams
       };
 
-      // Set flag untuk cegah loop listener
       isUpdatingFromCloud = true;
       
       await docRef.set(data);
@@ -401,7 +388,6 @@ App.FeatureLoaders.klasemen = function(userRef) {
 
       await docRef.delete();
 
-      // Reset ke template kosong
       const teams = teamsData[currentLeague] || [];
       currentTeams = teams.map(name => createEmptyTeam(name));
       renderTable();
@@ -423,7 +409,6 @@ App.FeatureLoaders.klasemen = function(userRef) {
   // === INIT ===
   loadTeams();
 
-  // Cleanup saat pindah tab
   return {
     cleanup: () => {
       if (unsubscribeKlasemen) {
@@ -437,4 +422,4 @@ App.FeatureLoaders.klasemen = function(userRef) {
   };
 };
 
-console.log("✅ Feature 6: Klasemen Manual (Auto-Save + Auto-Sort) loaded");
+console.log("✅ Feature 6: Klasemen Manual v4.1 (Fix setSelectionRange + Auto-Save) loaded");
