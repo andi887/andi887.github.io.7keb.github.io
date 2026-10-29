@@ -1,7 +1,7 @@
 /**
  * feature1-parlay.js
  * Fitur 1: Analisis Parlay + Over/Under
- * MANDIRI — dengan autocomplete tim dari data/teams.json
+ * MANDIRI — dengan autocomplete tim dari data/teams.json + TIM FAVORIT FIRESTORE
  * SEMUA LOGIKA ASLI DIPERTAHANKAN
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -14,6 +14,7 @@ App.FeatureLoaders.parlay = function(userRef) {
   let temporaryMatchData = null;
   let teamsData = {};
   let allTeams = [];
+  let favoriteTeams = []; // ⭐ BARU: tim favorit dari Firestore
 
   // === LOAD TEAMS.JSON ===
   async function loadTeams() {
@@ -29,6 +30,33 @@ App.FeatureLoaders.parlay = function(userRef) {
       teamsData = {};
       allTeams = [];
     }
+  }
+
+  // === ⭐ BARU: LOAD TIM FAVORIT DARI FIRESTORE ===
+  function loadTimFavorit() {
+    const uid = App.Auth.currentUser?.uid;
+    if (!uid) {
+      console.warn('⚠️ User belum login, skip load tim favorit');
+      return;
+    }
+    
+    const path = 'users/' + uid + '/timFavorit';
+    console.log('👂 [PARLAY] Listening tim favorit:', path);
+    
+    App.Service.loadData(path, val => {
+      if (Array.isArray(val)) {
+        favoriteTeams = val.map(t => ({
+          nama: t.nama || t.name || 'Unknown',
+          liga: t.liga || t.league || 'Unknown'
+        }));
+        console.log(`⭐ [PARLAY] Loaded ${favoriteTeams.length} tim favorit dari Firestore`);
+      } else {
+        favoriteTeams = [];
+        console.log('ℹ️ [PARLAY] Belum ada tim favorit');
+      }
+      // Re-render datalist dengan data baru (termasuk favorit)
+      renderTeamDatalist();
+    });
   }
 
   // === RENDER HTML FITUR 1 ===
@@ -73,16 +101,34 @@ App.FeatureLoaders.parlay = function(userRef) {
     renderPertandingan();
   }
 
-  // === RENDER DATALIST TIM ===
+  // === RENDER DATALIST TIM (⭐ DIPERBARUI: GABUNG FAVORIT + JSON) ===
   function renderTeamDatalist() {
     const datalist = document.getElementById('teamDatalist');
     if (!datalist) {
       console.warn('⚠️ Element #teamDatalist tidak ditemukan');
       return;
     }
-    const sorted = [...new Set(allTeams)].sort((a, b) => a.localeCompare(b));
-    datalist.innerHTML = sorted.map(t => `<option value="${t}">`).join('');
-    console.log(`✅ Datalist terisi dengan ${sorted.length} tim unik`);
+    
+    let options = [];
+    
+    // 1. Tim favorit (prioritas atas, dengan tanda ⭐ dan info liga)
+    if (favoriteTeams.length > 0) {
+      const favOptions = favoriteTeams
+        .sort((a, b) => a.nama.localeCompare(b.nama))
+        .map(t => `<option value="${t.nama}">⭐ ${t.nama} (${t.liga})</option>`);
+      options = options.concat(favOptions);
+    }
+    
+    // 2. Tim dari teams.json (alphabetical, tanpa tim favorit yang sudah ditambahkan)
+    const favNames = new Set(favoriteTeams.map(t => t.nama.toLowerCase()));
+    const regularTeams = [...new Set(allTeams)]
+      .filter(t => !favNames.has(t.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b))
+      .map(t => `<option value="${t}">${t}</option>`);
+    options = options.concat(regularTeams);
+    
+    datalist.innerHTML = options.join('');
+    console.log(`✅ Datalist terisi: ${favoriteTeams.length} favorit + ${regularTeams.length} reguler = ${options.length} total`);
   }
 
   function bindEvents() {
@@ -134,9 +180,9 @@ App.FeatureLoaders.parlay = function(userRef) {
                 <input type="text" id="teamA${i}" 
                   value="${data.teamA||''}" 
                   list="teamDatalist" 
-                  placeholder="Ketik atau pilih tim" 
+                  placeholder="Ketik atau pilih tim ▾" 
                   class="team-input"
-                  style="width:140px;">
+                  style="width:160px;">
               </label>
             </div>
             <div><label>Odds A:<br><input type="number" id="A${i}" value="${data.oddsA||'0'}" step="0.01" min="0"></label></div>
@@ -146,9 +192,9 @@ App.FeatureLoaders.parlay = function(userRef) {
                 <input type="text" id="teamB${i}" 
                   value="${data.teamB||''}" 
                   list="teamDatalist" 
-                  placeholder="Ketik atau pilih tim" 
+                  placeholder="Ketik atau pilih tim ▾" 
                   class="team-input"
-                  style="width:140px;">
+                  style="width:160px;">
               </label>
             </div>
             <div><label>Odds B:<br><input type="number" id="B${i}" value="${data.oddsB||'0'}" step="0.01" min="0"></label></div>
@@ -297,7 +343,7 @@ App.FeatureLoaders.parlay = function(userRef) {
         </div>`;
       });
       if (jumlahPertandingan===1) {
-        html+=`<div class="parlay-result"><h2>️ Analisis Tunggal</h2><p>Hanya 1 pertandingan.</p></div>`;
+        html+=`<div class="parlay-result"><h2>⚽ Analisis Tunggal</h2><p>Hanya 1 pertandingan.</p></div>`;
       } else {
         const probGab = hasilList.reduce((a,h)=>a*h.probPilihan,1);
         const oddsTeo = 1/probGab;
@@ -370,7 +416,7 @@ App.FeatureLoaders.parlay = function(userRef) {
     }
     App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
       .then(()=>{ firebaseParlayData=data; temporaryMatchData=null; alert("✅ Data tersimpan!"); })
-      .catch(e=>alert(" Gagal: "+e.message));
+      .catch(e=>alert("❌ Gagal: "+e.message));
   }
 
   function hapusData() {
@@ -392,11 +438,16 @@ App.FeatureLoaders.parlay = function(userRef) {
     renderPertandingan();
   });
 
-  // === INIT: Load teams dulu, baru render ===
+  // === INIT: Urutan yang benar ===
+  // 1. Load teams.json
+  // 2. Render HTML (termasuk datalist container)
+  // 3. Render datalist awal
+  // 4. Load tim favorit dari Firestore (akan re-render datalist otomatis)
   loadTeams().then(() => {
-    renderTeamDatalist();
     renderHTML();
+    renderTeamDatalist();
+    loadTimFavorit();
   });
 };
 
-console.log("✅ Feature 1: Parlay loaded");
+console.log("✅ Feature 1: Parlay loaded - DENGAN TIM FAVORIT");
