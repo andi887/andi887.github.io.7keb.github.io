@@ -1,8 +1,6 @@
 /**
- * feature1-parlay.js
- * Fitur 1: Analisis Parlay + Over/Under
- * MANDIRI — dengan autocomplete tim dari data/teams.json + TIM FAVORIT FIRESTORE
- * SEMUA LOGIKA ASLI DIPERTAHANKAN
+ * feature1-parlay.js - DENGAN PENYIMPANAN HASIL PREDIKSI
+ * Fitur 1: Analisis Parlay + Over/Under + Autocomplete Tim Favorit
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
 
@@ -14,7 +12,8 @@ App.FeatureLoaders.parlay = function(userRef) {
   let temporaryMatchData = null;
   let teamsData = {};
   let allTeams = [];
-  let favoriteTeams = []; // ⭐ BARU: tim favorit dari Firestore
+  let favoriteTeams = [];
+  let lastPrediction = null; // ⭐ BARU: simpan prediksi terakhir
 
   // === LOAD TEAMS.JSON ===
   async function loadTeams() {
@@ -24,7 +23,6 @@ App.FeatureLoaders.parlay = function(userRef) {
       teamsData = await response.json();
       allTeams = Object.values(teamsData).flat();
       console.log(`✅ Loaded ${allTeams.length} teams dari data/teams.json`);
-      console.log('📋 Daftar liga:', Object.keys(teamsData));
     } catch (err) {
       console.error('❌ Gagal memuat teams.json:', err.message);
       teamsData = {};
@@ -32,34 +30,25 @@ App.FeatureLoaders.parlay = function(userRef) {
     }
   }
 
-  // === ⭐ BARU: LOAD TIM FAVORIT DARI FIRESTORE ===
+  // === LOAD TIM FAVORIT DARI FIRESTORE ===
   function loadTimFavorit() {
     const uid = App.Auth.currentUser?.uid;
-    if (!uid) {
-      console.warn('⚠️ User belum login, skip load tim favorit');
-      return;
-    }
+    if (!uid) return;
     
-    const path = 'users/' + uid + '/timFavorit';
-    console.log('👂 [PARLAY] Listening tim favorit:', path);
-    
-    App.Service.loadData(path, val => {
+    App.Service.loadData('users/' + uid + '/timFavorit', val => {
       if (Array.isArray(val)) {
         favoriteTeams = val.map(t => ({
           nama: t.nama || t.name || 'Unknown',
           liga: t.liga || t.league || 'Unknown'
         }));
-        console.log(`⭐ [PARLAY] Loaded ${favoriteTeams.length} tim favorit dari Firestore`);
       } else {
         favoriteTeams = [];
-        console.log('ℹ️ [PARLAY] Belum ada tim favorit');
       }
-      // Re-render datalist dengan data baru (termasuk favorit)
       renderTeamDatalist();
     });
   }
 
-  // === RENDER HTML FITUR 1 ===
+  // === RENDER HTML ===
   function renderHTML() {
     container.innerHTML = `
       <h2>1. Analisis Parlay + Rekomendasi Over/Under</h2>
@@ -76,7 +65,7 @@ App.FeatureLoaders.parlay = function(userRef) {
       </div>
       <div class="action-buttons">
         <button class="btn-primary" id="btnHitung">Hitung Analisis, Parlay & EV</button>
-        <button class="btn-success" id="btnSimpan">💾 Simpan Data</button>
+        <button class="btn-success" id="btnSimpan">💾 Simpan Data + Prediksi</button>
         <button class="btn-danger" id="btnHapusData">🗑️ Hapus Data</button>
       </div>
       <div id="fairOddsContainer" class="fair-odds-table" style="display:none;">
@@ -96,22 +85,17 @@ App.FeatureLoaders.parlay = function(userRef) {
       <div id="hasil"></div>
       <datalist id="teamDatalist"></datalist>
     `;
-
     bindEvents();
     renderPertandingan();
   }
 
-  // === RENDER DATALIST TIM (⭐ DIPERBARUI: GABUNG FAVORIT + JSON) ===
+  // === RENDER DATALIST TIM ===
   function renderTeamDatalist() {
     const datalist = document.getElementById('teamDatalist');
-    if (!datalist) {
-      console.warn('⚠️ Element #teamDatalist tidak ditemukan');
-      return;
-    }
+    if (!datalist) return;
     
     let options = [];
     
-    // 1. Tim favorit (prioritas atas, dengan tanda ⭐ dan info liga)
     if (favoriteTeams.length > 0) {
       const favOptions = favoriteTeams
         .sort((a, b) => a.nama.localeCompare(b.nama))
@@ -119,7 +103,6 @@ App.FeatureLoaders.parlay = function(userRef) {
       options = options.concat(favOptions);
     }
     
-    // 2. Tim dari teams.json (alphabetical, tanpa tim favorit yang sudah ditambahkan)
     const favNames = new Set(favoriteTeams.map(t => t.nama.toLowerCase()));
     const regularTeams = [...new Set(allTeams)]
       .filter(t => !favNames.has(t.toLowerCase()))
@@ -128,7 +111,6 @@ App.FeatureLoaders.parlay = function(userRef) {
     options = options.concat(regularTeams);
     
     datalist.innerHTML = options.join('');
-    console.log(`✅ Datalist terisi: ${favoriteTeams.length} favorit + ${regularTeams.length} reguler = ${options.length} total`);
   }
 
   function bindEvents() {
@@ -140,7 +122,6 @@ App.FeatureLoaders.parlay = function(userRef) {
     document.getElementById('btnLihatAdil').onclick = tampilkanOddsAdil;
   }
 
-  // === LOGIKA ASLI (TIDAK DIUBAH) ===
   function simpanInputSementara() {
     temporaryMatchData = [];
     for (let i = 1; i <= jumlahPertandingan; i++) {
@@ -317,8 +298,78 @@ App.FeatureLoaders.parlay = function(userRef) {
     else if (probD>=probA&&probD>=probB){pilihan="Draw";probPilihan=probD;}
     return {
       persentase:{timA:(probA*100).toFixed(2)+"%",draw:(probD*100).toFixed(2)+"%",timB:(probB*100).toFixed(2)+"%"},
-      label, pilihan, probPilihan
+      label, pilihan, probPilihan,
+      // ⭐ BARU: simpan angka mentah untuk storage
+      raw: { probA, probD, probB }
     };
+  }
+
+  // ⭐ BARU: Generate semua prediksi (dipanggil saat simpan)
+  function generateAllPredictions() {
+    const matchPredictions = [];
+    const hasilList = [];
+    
+    for (let i = 1; i <= jumlahPertandingan; i++) {
+      const a = parseFloat(document.getElementById(`A${i}`).value);
+      const d = parseFloat(document.getElementById(`D${i}`).value);
+      const b = parseFloat(document.getElementById(`B${i}`).value);
+      
+      if (isNaN(a) || isNaN(d) || isNaN(b) || a<=1 || d<=1 || b<=1) {
+        return null; // Tidak valid
+      }
+      
+      const hasil = analisisPertandingan(a, d, b);
+      hasilList.push(hasil);
+      
+      // Ambil rekomendasi O/U dari DOM
+      const recEl = document.getElementById(`recOU${i}`);
+      let recOU = '';
+      if (recEl) {
+        const match = recEl.textContent.match(/(Over|Under)\s+[\d.]+/);
+        if (match) recOU = match[0];
+      }
+      
+      const nA = document.getElementById(`teamA${i}`)?.value.trim() || 'Tim A';
+      const nB = document.getElementById(`teamB${i}`)?.value.trim() || 'Tim B';
+      
+      matchPredictions.push({
+        probA: hasil.persentase.timA,
+        probDraw: hasil.persentase.draw,
+        probB: hasil.persentase.timB,
+        label: hasil.label.replace(/Tim A/g, nA).replace(/Tim B/g, nB),
+        pilihan: hasil.pilihan === 'Tim A' ? nA : hasil.pilihan === 'Tim B' ? nB : 'Draw',
+        probPilihan: hasil.probPilihan,
+        recOU: recOU
+      });
+    }
+    
+    // Hitung prediksi parlay
+    let parlaySummary = null;
+    if (jumlahPertandingan > 1) {
+      const probGab = hasilList.reduce((acc, h) => acc * h.probPilihan, 1);
+      const oddsTeo = 1 / probGab;
+      let risiko = "Rendah";
+      if (probGab < 0.05) risiko = "Sangat Tinggi";
+      else if (probGab < 0.1) risiko = "Tinggi";
+      else if (probGab < 0.2) risiko = "Sedang";
+      
+      const oddsBandar = parseFloat(document.getElementById("oddsBandarInput").value);
+      const ev = (!isNaN(oddsBandar) && oddsBandar > 1) ? probGab * oddsBandar - 1 : null;
+      const rekomendasi = ev !== null ? (ev > 0 ? "✅ LAYAK (Positive EV)" : "❌ TIDAK LAYAK (Negative EV)") : "N/A";
+      
+      parlaySummary = {
+        totalMatches: jumlahPertandingan,
+        probMenang: (probGab * 100).toFixed(2) + "%",
+        oddsTeoretis: oddsTeo.toFixed(2),
+        oddsBandar: oddsBandar || null,
+        risiko: risiko,
+        ev: ev !== null ? (ev * 100).toFixed(2) + "%" : null,
+        rekomendasi: rekomendasi,
+        savedAt: new Date().toISOString()
+      };
+    }
+    
+    return { matchPredictions, parlaySummary };
   }
 
   function hitungParlay() {
@@ -400,49 +451,91 @@ App.FeatureLoaders.parlay = function(userRef) {
     } catch(e) { alert("Error: "+e.message); }
   }
 
+  // ⭐ DIPERBARUI: Simpan input + hasil prediksi
   function simpanData() {
-    const data=[];
-    for (let i=1;i<=jumlahPertandingan;i++) {
+    // Validasi input dasar
+    for (let i = 1; i <= jumlahPertandingan; i++) {
+      const a = parseFloat(document.getElementById(`A${i}`)?.value);
+      const d = parseFloat(document.getElementById(`D${i}`)?.value);
+      const b = parseFloat(document.getElementById(`B${i}`)?.value);
+      if (isNaN(a) || isNaN(d) || isNaN(b) || a <= 1 || d <= 1 || b <= 1) {
+        alert(`❌ Pertandingan ${i}: Odds 1X2 harus > 1 dan valid.\n\nSilakan klik "Hitung Analisis" dulu sebelum menyimpan.`);
+        return;
+      }
+    }
+    
+    // Generate semua prediksi
+    const predictions = generateAllPredictions();
+    if (!predictions) {
+      alert('❌ Gagal generate prediksi. Pastikan semua odds valid.');
+      return;
+    }
+    
+    // Siapkan data untuk disimpan
+    const data = [];
+    for (let i = 1; i <= jumlahPertandingan; i++) {
       data.push({
-        matchDate: i===1?(document.getElementById("date1")?.value||""):"",
-        teamA: document.getElementById(`teamA${i}`)?.value.trim()||"Tim A",
-        teamB: document.getElementById(`teamB${i}`)?.value.trim()||"Tim B",
-        oddsA: document.getElementById(`A${i}`)?.value||"0",
-        oddsD: document.getElementById(`D${i}`)?.value||"0",
-        oddsB: document.getElementById(`B${i}`)?.value||"0",
-        over: document.getElementById(`O${i}`)?.value||"0",
-        under: document.getElementById(`U${i}`)?.value||"0",
+        // Input
+        matchDate: i === 1 ? (document.getElementById("date1")?.value || "") : "",
+        teamA: document.getElementById(`teamA${i}`)?.value.trim() || "Tim A",
+        teamB: document.getElementById(`teamB${i}`)?.value.trim() || "Tim B",
+        oddsA: document.getElementById(`A${i}`)?.value || "0",
+        oddsD: document.getElementById(`D${i}`)?.value || "0",
+        oddsB: document.getElementById(`B${i}`)?.value || "0",
+        over: document.getElementById(`O${i}`)?.value || "0",
+        under: document.getElementById(`U${i}`)?.value || "0",
+        // ⭐ Prediksi
+        prediction: predictions.matchPredictions[i-1]
       });
     }
-    App.Service.saveData('users/'+App.Auth.currentUser.uid+'/parlayData', data)
-      .then(()=>{ firebaseParlayData=data; temporaryMatchData=null; alert("✅ Data tersimpan!"); })
-      .catch(e=>alert("❌ Gagal: "+e.message));
+    
+    // Simpan ke Firestore
+    const uid = App.Auth.currentUser.uid;
+    const path = 'users/' + uid + '/parlayData';
+    
+    // Simpan data pertandingan
+    App.Service.saveData(path, data)
+      .then(() => {
+        // Simpan summary parlay terpisah
+        if (predictions.parlaySummary) {
+          return App.Service.saveData('users/' + uid + '/parlaySummary', predictions.parlaySummary);
+        }
+      })
+      .then(() => {
+        firebaseParlayData = data;
+        temporaryMatchData = null;
+        lastPrediction = predictions;
+        alert(`✅ Data + Prediksi tersimpan!\n\n📊 ${jumlahPertandingan} pertandingan\n🎯 ${predictions.parlaySummary ? 'Parlay summary juga tersimpan' : '1 pertandingan (tunggal)'}`);
+      })
+      .catch(e => alert("❌ Gagal simpan: " + e.message));
   }
 
   function hapusData() {
-    if (!confirm("Hapus semua data Fitur 1?")) return;
-    App.Service.removeData('users/'+App.Auth.currentUser.uid+'/parlayData')
-      .then(()=>{
-        jumlahPertandingan=1; firebaseParlayData=[]; temporaryMatchData=null;
+    if (!confirm("Hapus semua data Fitur 1 (input + prediksi)?")) return;
+    const uid = App.Auth.currentUser.uid;
+    App.Service.removeData('users/' + uid + '/parlayData')
+      .then(() => App.Service.removeData('users/' + uid + '/parlaySummary'))
+      .then(() => {
+        jumlahPertandingan = 1;
+        firebaseParlayData = [];
+        temporaryMatchData = null;
+        lastPrediction = null;
         renderPertandingan();
-        const h=document.getElementById("hasil"); if(h) h.innerHTML="";
-        const f=document.getElementById("fairOddsContainer"); if(f) f.style.display="none";
-        alert("✅ Data dihapus.");
+        const h = document.getElementById("hasil"); if(h) h.innerHTML = "";
+        const f = document.getElementById("fairOddsContainer"); if(f) f.style.display = "none";
+        alert("✅ Semua data dihapus.");
       });
   }
 
-  // === LOAD DATA DARI FIREBASE ===
-  App.Service.loadData('users/'+App.Auth.currentUser.uid+'/parlayData', val=>{
-    firebaseParlayData = Array.isArray(val)?val:[];
+  // Load data dari Firestore (input + prediksi)
+  App.Service.loadData('users/' + App.Auth.currentUser.uid + '/parlayData', val => {
+    firebaseParlayData = Array.isArray(val) ? val : [];
     jumlahPertandingan = Math.max(1, firebaseParlayData.length);
     renderPertandingan();
+    console.log('📥 Loaded parlay data:', firebaseParlayData.length, 'matches');
   });
 
-  // === INIT: Urutan yang benar ===
-  // 1. Load teams.json
-  // 2. Render HTML (termasuk datalist container)
-  // 3. Render datalist awal
-  // 4. Load tim favorit dari Firestore (akan re-render datalist otomatis)
+  // INIT
   loadTeams().then(() => {
     renderHTML();
     renderTeamDatalist();
@@ -450,4 +543,4 @@ App.FeatureLoaders.parlay = function(userRef) {
   });
 };
 
-console.log("✅ Feature 1: Parlay loaded - DENGAN TIM FAVORIT");
+console.log("✅ Feature 1: Parlay loaded - DENGAN PENYIMPANAN PREDIKSI");
