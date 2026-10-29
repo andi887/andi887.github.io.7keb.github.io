@@ -1,7 +1,7 @@
 /**
  * firebase-config.js
  * Hanya berisi konfigurasi & inisialisasi Firebase.
- * Tidak ada logika bisnis di sini.
+ * PROJECT BARU: ber3lebihbaik
  */
 
 const FIREBASE_CONFIG = {
@@ -13,6 +13,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "819172531554",
   appId: "1:819172531554:web:6d3aa2bd5244481271a03b"
 };
+
 // Inisialisasi Firebase
 firebase.initializeApp(FIREBASE_CONFIG);
 
@@ -23,4 +24,4 @@ window.FirebaseApp = {
   db: firebase.firestore()
 };
 
-console.log("✅ Firebase Config loaded (dengan Firestore)");
+console.log("✅ Firebase Config loaded (dengan Firestore) - PROJECT ber3lebihbaik");
