@@ -1,6 +1,6 @@
 /**
- * feature2-favorit.js - FIXED VERSION
- * Fix untuk screenshot: autocomplete tim + liga + edit mode + normalisasi "liga italy"
+ * feature2-favorit.js - UPDATED VERSION
+ * Integrasi dengan Firestore: tim_favorit/1/daftar_tim
  */
 App.FeatureLoaders = App.FeatureLoaders || {};
 
@@ -11,6 +11,7 @@ App.FeatureLoaders.favorit = function(userRef) {
   let teamsData = {};
   let allTeams = [];
   let allLigas = [];
+  let db = firebase.firestore(); // Firestore instance
 
   async function loadTeams() {
     try {
@@ -28,18 +29,14 @@ App.FeatureLoaders.favorit = function(userRef) {
 
   function normalizeLiga(input) {
     if (!input) return '';
-    // mapping biar "liga italy" -> "Serie A" / "Italy"
     const lower = input.toLowerCase();
-    // cari di allLigas yang cocok
     const found = allLigas.find(l => l.toLowerCase().includes(lower) || lower.includes(l.toLowerCase().split(' ')[0]));
     if (found) return found;
-    // manual mapping
     if (lower.includes('italy') || lower.includes('italia')) return 'Serie A';
     if (lower.includes('premier') || lower.includes('inggris') || lower.includes('epl')) return 'Premier League';
     if (lower.includes('spanyol') || lower.includes('la liga')) return 'La Liga';
     if (lower.includes('jerman') || lower.includes('bundes')) return 'Bundesliga';
     if (lower.includes('prancis') || lower.includes('ligue')) return 'Ligue 1';
-    // kapitalisasi tiap kata
     return input.split(' ').map(w=> w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
   }
 
@@ -52,16 +49,16 @@ App.FeatureLoaders.favorit = function(userRef) {
       <h2>2. Kumpulan Tim Favorit</h2>
       <div class="input-group" style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:15px;">
         <div style="flex:1; min-width:200px;">
-          <label style="font-size:12px; color:#666;">Nama Tim</label><br>
+          <label style="font-size:12px; color:#666;">Nama Tim <span style="color:red;">*</span></label><br>
           <input type="text" id="inputTim" list="favTeamDatalist" placeholder="Contoh: Manchester United" style="width:100%; padding:8px;">
         </div>
         <div style="flex:1; min-width:200px;">
-          <label style="font-size:12px; color:#666;">Liga</label><br>
+          <label style="font-size:12px; color:#666;">Liga <span style="color:red;">*</span></label><br>
           <input type="text" id="inputLiga" list="favLigaDatalist" placeholder="Contoh: Premier League" style="width:100%; padding:8px;">
         </div>
         <div style="display:flex; gap:6px;">
           <button class="btn-primary" id="btnTambahTim">➕ Tambah Tim</button>
-          <button class="btn-secondary" id="btnBatalEdit" style="display:none;">❌ Batal</button>
+          <button class="btn-secondary" id="btnBatalEdit" style="display:none;"> Batal</button>
         </div>
       </div>
       <div id="editIndicator" style="display:none; background:#fff3cd; border:1px solid #ffc107; padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;">🟡 Mode Edit: <span id="editNama"></span> <small>— ubah lalu klik Simpan</small></div>
@@ -93,7 +90,6 @@ App.FeatureLoaders.favorit = function(userRef) {
     if (!inputTim || !inputLiga) return;
     const nama = inputTim.value.trim();
     if (!nama) return;
-    // cari liga dari teamsData
     for (const [liga, teams] of Object.entries(teamsData)) {
       if (teams.some(t=> t.toLowerCase()===nama.toLowerCase())) {
         inputLiga.value = liga;
@@ -147,13 +143,47 @@ App.FeatureLoaders.favorit = function(userRef) {
     document.getElementById('editIndicator').style.display = 'none';
   }
 
-  function simpanKeFirebase() {
-    const uid = App.Auth.currentUser.uid;
-    const path = `users/${uid}/timFavorit`;
-    console.log('🔵 [DEBUG] Mencoba menyimpan ke Firestore...', path, daftarTim);
-    App.Service.saveData(path, daftarTim)
-      .then(() => console.log('✅ [DEBUG] BERHASIL! Data tersimpan ke Firestore.'))
-      .catch(error => { console.error('❌ [DEBUG] GAGAL!', error); alert('Gagal menyimpan: ' + error.message); });
+  //  SAVE TO FIRESTORE - tim_favorit/1/daftar_tim
+  async function simpanKeFirebase() {
+    try {
+      const docRef = db.collection('tim_favorit').doc('1');
+      await docRef.set({
+        daftar_tim: daftarTim
+      }, { merge: true });
+      console.log('✅ [FIRESTORE] Data tersimpan ke tim_favorit/1/daftar_tim', daftarTim);
+    } catch(error) {
+      console.error('❌ [FIRESTORE] Gagal menyimpan:', error);
+      alert('Gagal menyimpan ke Firestore: ' + error.message);
+    }
+  }
+
+  // 🔥 LOAD FROM FIRESTORE - Real-time listener
+  function loadDariFirebase() {
+    const docRef = db.collection('tim_favorit').doc('1');
+    
+    docRef.onSnapshot(doc => {
+      if (doc.exists) {
+        const data = doc.data();
+        if (data && Array.isArray(data.daftar_tim)) {
+          daftarTim = data.daftar_tim.map(t => ({
+            nama: t.nama || t.name || 'Unknown',
+            liga: normalizeLiga(t.liga || t.league || 'Belum ditentukan')
+          }));
+          console.log('📥 [FIRESTORE] Data diterima:', daftarTim.length, 'tim');
+          renderDaftarTim();
+        } else {
+          console.log('ℹ️ [FIRESTORE] Belum ada data daftar_tim');
+          daftarTim = [];
+          renderDaftarTim();
+        }
+      } else {
+        console.log('ℹ️ [FIRESTORE] Document tim_favorit/1 belum ada');
+        daftarTim = [];
+        renderDaftarTim();
+      }
+    }, error => {
+      console.error('❌ [FIRESTORE] Error listening:', error);
+    });
   }
 
   function tambahTim() {
@@ -161,31 +191,41 @@ App.FeatureLoaders.favorit = function(userRef) {
     const inputLiga = document.getElementById('inputLiga');
     let nama = inputTim.value.trim();
     let liga = inputLiga.value.trim();
-    if (!nama) { alert("Nama tim tidak boleh kosong!"); return; }
-    if (!liga) { liga = normalizeLiga(''); if (!liga) { alert("Nama liga tidak boleh kosong!"); return; } }
-    nama = nama.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+    
+    if (!nama) { alert("⚠️ Nama tim tidak boleh kosong!"); inputTim.focus(); return; }
+    if (!liga) { alert("⚠️ Liga tidak boleh kosong! Silakan pilih atau ketik liga."); inputLiga.focus(); return; }
+    
+    nama = normalizeNama(nama);
     liga = normalizeLiga(liga);
+    
     const sudahAda = daftarTim.findIndex(t => t.nama.toLowerCase() === nama.toLowerCase());
+    
     if (sedangMengedit !== null) {
+      // Edit mode
       daftarTim[sedangMengedit] = { nama, liga };
-      console.log('🟡 [DEBUG] Data diperbarui (Edit)', sedangMengedit, nama, liga);
+      console.log('🟡 [UPDATE] Tim diperbarui:', sedangMengedit, nama, liga);
     } else {
-      if (sudahAda !== -1) { alert('Tim sudah ada! Gunakan Edit jika ingin mengubah liga.'); return; }
+      // Tambah baru
+      if (sudahAda !== -1) { 
+        alert('⚠️ Tim sudah ada di daftar favorit! Gunakan tombol Edit jika ingin mengubah liga.'); 
+        return; 
+      }
       daftarTim.push({ nama, liga });
-      console.log('🟢 [DEBUG] Data baru ditambahkan', nama, liga);
+      console.log('🟢 [TAMBAH] Tim baru:', nama, liga);
     }
+    
     resetForm();
     renderDaftarTim();
-    simpanKeFirebase();
+    simpanKeFirebase(); // Auto-save ke Firestore
   }
 
   function hapusTim(idx) {
-    if (!confirm(`Hapus ${daftarTim[idx].nama}?`)) return;
-    console.log('🔴 [DEBUG] Menghapus tim index:', idx);
+    if (!confirm(`Hapus ${daftarTim[idx].nama} dari favorit?`)) return;
+    console.log('🔴 [HAPUS] Menghapus tim index:', idx, daftarTim[idx].nama);
     daftarTim.splice(idx, 1);
     if (sedangMengedit === idx) resetForm();
     renderDaftarTim();
-    simpanKeFirebase();
+    simpanKeFirebase(); // Auto-save ke Firestore
   }
 
   function bindEvents() {
@@ -197,21 +237,21 @@ App.FeatureLoaders.favorit = function(userRef) {
       inputTim.addEventListener('input', autoFillLiga);
       inputTim.addEventListener('blur', () => setTimeout(autoFillLiga, 200));
     }
+    
+    // Enter key untuk submit
+    document.getElementById('inputLiga')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') tambahTim();
+    });
   }
 
   // INIT
   (async()=>{
+    console.log('🚀 [FAVORIT] Initializing...');
     renderHTML();
     await loadTeams();
     renderDatalists();
-    console.log('🟣 [DEBUG] Memulai proses memuat data dari Firestore...');
-    App.Service.loadData('users/' + App.Auth.currentUser.uid + '/timFavorit', val => {
-      console.log('🟣 [DEBUG] Data diterima dari Firestore:', val);
-      if (Array.isArray(val)) {
-        daftarTim = val.map(t => typeof t === 'string' ? { nama: t, liga: 'Belum ditentukan' } : { nama: t.nama || t.name || 'Unknown', liga: normalizeLiga(t.liga || t.league || 'Belum ditentukan') });
-      } else { daftarTim = []; }
-      renderDaftarTim();
-    });
+    loadDariFirebase(); // Load real-time dari Firestore
+    console.log('✅ [FAVORIT] Feature loaded - Listening to tim_favorit/1/daftar_tim');
   })();
 };
-console.log("✅ Feature 2: Favorit loaded - FIXED");
+console.log("✅ Feature 2: Favorit loaded - FIRESTORE INTEGRATED");
