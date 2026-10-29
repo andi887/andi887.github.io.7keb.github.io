@@ -1,5 +1,6 @@
 /**
- * feature2-favorit.js - WITH TIMEOUT & PERMISSION CHECK
+ * feature2-favorit.js - VERSI FINAL YANG BENAR
+ * Menggunakan path users/{uid}/timFavorit yang sudah didukung App.Service
  */
 
 App.FeatureLoaders = App.FeatureLoaders || {};
@@ -7,27 +8,16 @@ App.FeatureLoaders = App.FeatureLoaders || {};
 App.FeatureLoaders.favorit = function() {
   const container = document.getElementById('favorit');
   let daftarTim = [];
-  const db = App.Service.db;
-  const FIRESTORE_PATH = 'tim_favorit/1';
-  const FIELD_NAME = 'daftar_tim';
 
-  console.log('🚀 [FAVORIT] TIMEOUT VERSION loaded');
-  console.log(' Firestore:', db ? 'OK' : 'NULL');
+  // PATH YANG DIDUKUNG OLEH firebase-service.js
+  function getPath() {
+    const uid = App.Auth.currentUser.uid;
+    return 'users/' + uid + '/timFavorit';
+  }
 
   function render() {
     container.innerHTML = `
       <h2>2. Kumpulan Tim Favorit</h2>
-      
-      <div style="background:#fff3cd; border:2px solid #ffc107; padding:15px; border-radius:8px; margin-bottom:20px;">
-        <strong style="color:#856404;">⚠️ PENTING: Firestore Rules</strong>
-        <p style="margin:10px 0; font-size:13px;">
-          Jika data tidak tersimpan, buka Firebase Console → Database → Rules<br>
-          Ganti rules menjadi:<br>
-          <code style="background:#f8f9fa; padding:5px; display:block; margin:5px 0;">
-            allow read, write: if true;
-          </code>
-        </p>
-      </div>
       
       <div style="background:#f8f9fa; padding:20px; border-radius:8px; margin-bottom:20px;">
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
@@ -68,8 +58,8 @@ App.FeatureLoaders.favorit = function() {
     const nama = inputTim.value.trim();
     const liga = inputLiga.value.trim();
     
-    if (!nama) { alert('Nama tim harus diisi!'); return; }
-    if (!liga) { alert('⚠️ Liga harus diisi!'); return; }
+    if (!nama) { alert('Nama tim harus diisi!'); inputTim.focus(); return; }
+    if (!liga) { alert('Liga harus diisi!'); inputLiga.focus(); return; }
     
     const sudahAda = daftarTim.find(t => t.nama.toLowerCase() === nama.toLowerCase());
     if (sudahAda) { alert('Tim sudah ada!'); return; }
@@ -77,97 +67,67 @@ App.FeatureLoaders.favorit = function() {
     const timBaru = { nama: capitalize(nama), liga: capitalize(liga) };
     daftarTim.push(timBaru);
     
-    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan (max 10 detik)...</span>';
+    statusDiv.innerHTML = '<span style="color:#007bff;">⏳ Menyimpan...</span>';
     
-    // Gunakan timeout
-    const writePromise = simpanKeFirestore();
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('TIMEOUT: Write operation > 10 detik. Cek Firestore Rules!')), 10000);
-    });
-    
-    Promise.race([writePromise, timeoutPromise])
+    simpanKeFirestore()
       .then(() => {
-        statusDiv.innerHTML = '<span style="color:#28a745;">✅ Tersimpan ke server!</span>';
+        statusDiv.innerHTML = '<span style="color:#28a745;">✅ Tersimpan!</span>';
         inputTim.value = '';
         inputLiga.value = '';
+        inputTim.focus();
         setTimeout(() => statusDiv.innerHTML = '', 3000);
       })
       .catch((error) => {
-        statusDiv.innerHTML = '<span style="color:#dc3545;"> Gagal: ' + error.message + '</span>';
+        statusDiv.innerHTML = '<span style="color:#dc3545;">❌ Gagal: ' + error.message + '</span>';
         daftarTim.pop();
         renderList();
-        
-        if (error.message.includes('TIMEOUT')) {
-          alert(' TIMEOUT!\n\nWrite operation tidak selesai dalam 10 detik.\n\nPenyebab kemungkinan:\n1. Firestore Rules memblokir write\n2. Koneksi internet lambat/putus\n\nSolusi:\n- Buka Firebase Console → Database → Rules\n- Ganti rules: allow read, write: if true;\n- Publish rules');
-        } else {
-          alert('❌ Gagal:\n' + error.message);
-        }
+        alert('Gagal simpan: ' + error.message);
       });
   }
 
   function hapusTim(index) {
-    if (confirm('Hapus "' + daftarTim[index].nama + '"?')) {
+    const tim = daftarTim[index];
+    if (confirm('Hapus "' + tim.nama + '"?')) {
       daftarTim.splice(index, 1);
-      simpanKeFirestore().catch(e => alert('Gagal: ' + e.message));
+      simpanKeFirestore().catch(e => alert('Gagal hapus: ' + e.message));
     }
   }
 
+  // SIMPAN - menggunakan App.Service.saveData dengan path yang didukung
   async function simpanKeFirestore() {
-    console.log(' [SAVE] Mulai simpan...');
-    console.log('📍 Path:', FIRESTORE_PATH);
-    console.log('📦 Data:', daftarTim);
+    const path = getPath();
+    console.log(' [SAVE] Path:', path);
+    console.log('📤 Data:', daftarTim);
     
-    const docRef = db.collection('tim_favorit').doc('1');
+    // App.Service.saveData akan handle path "users/{uid}/timFavorit"
+    // dan menyimpan sebagai field "timFavorit" di document user
+    await App.Service.saveData(path, daftarTim);
     
-    console.log('🔥 Menulis ke Firestore...');
-    
-    const result = await docRef.set({
-      [FIELD_NAME]: daftarTim
-    }, { merge: true });
-    
-    console.log('✅ [SAVE] Write berhasil!');
-    console.log('🔍 Verifikasi...');
-    
-    // Verifikasi dari server
-    const snapshot = await docRef.get({ source: 'server' });
-    
-    if (snapshot.exists) {
-      const data = snapshot.data();
-      console.log('✅ [VERIFY] Data di server:', data);
-      
-      if (data[FIELD_NAME] && data[FIELD_NAME].length === daftarTim.length) {
-        console.log('✅ [VERIFY] Data cocok!');
-        renderList();
-        return result;
-      } else {
-        throw new Error('Data tidak cocok setelah write!');
-      }
-    } else {
-      throw new Error('Document tidak ada setelah write!');
-    }
+    console.log('✅ [SAVE] Berhasil!');
+    renderList();
   }
 
+  // LOAD - menggunakan App.Service.loadData dengan path yang didukung
   function loadDariFirestore() {
-    console.log('👂 [LOAD] Listening...');
-    const docRef = db.collection('tim_favorit').doc('1');
+    const path = getPath();
+    console.log('👂 [LOAD] Listening:', path);
     
-    docRef.onSnapshot({ includeMetadataChanges: true }, (doc) => {
-      console.log(' [SNAPSHOT]', {
-        exists: doc.exists,
-        fromCache: doc.metadata.fromCache,
-        hasPendingWrites: doc.metadata.hasPendingWrites
-      });
+    // App.Service.loadData akan listen ke document user
+    // dan return field "timFavorit"
+    App.Service.loadData(path, (val) => {
+      console.log('📥 [LOAD] Data diterima:', val);
       
-      if (doc.exists && doc.data()[FIELD_NAME]) {
-        daftarTim = doc.data()[FIELD_NAME];
-        console.log(' Load', daftarTim.length, 'tim');
+      if (Array.isArray(val)) {
+        daftarTim = val.map(t => ({
+          nama: t.nama || t.name || 'Unknown',
+          liga: t.liga || t.league || 'Belum ditentukan'
+        }));
       } else {
         daftarTim = [];
       }
       
+      console.log('📥 [LOAD] Total tim:', daftarTim.length);
       renderList();
-    }, (error) => {
-      console.error('❌ [LISTENER] Error:', error);
     });
   }
 
@@ -185,10 +145,10 @@ App.FeatureLoaders.favorit = function() {
       html += `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:white; border:1px solid #e0e0e0; border-radius:6px;">
           <div>
-            <strong>${tim.nama}</strong>
-            <span style="margin-left:10px; padding:4px 10px; background:#e3f2fd; color:#1976d2; border-radius:12px; font-size:12px;">${tim.liga}</span>
+            <strong style="font-size:16px;">${tim.nama}</strong>
+            <span style="margin-left:10px; padding:4px 10px; background:#e3f2fd; color:#1976d2; border-radius:12px; font-size:12px; font-weight:600;">${tim.liga}</span>
           </div>
-          <button onclick="window.favHapusTim(${index})" style="padding:6px 12px; background:#ffebee; color:#c62828; border:none; border-radius:4px; cursor:pointer;">
+          <button onclick="window.favHapusTim(${index})" style="padding:6px 12px; background:#ffebee; color:#c62828; border:none; border-radius:4px; cursor:pointer; font-size:13px;">
             🗑 Hapus
           </button>
         </div>
@@ -204,8 +164,9 @@ App.FeatureLoaders.favorit = function() {
   }
 
   // INIT
+  console.log('🚀 [FAVORIT] FINAL VERSION - Menggunakan App.Service');
   render();
   loadDariFirestore();
 };
 
-console.log('✅ feature2-favorit.js TIMEOUT VERSION loaded');
+console.log('✅ feature2-favorit.js FINAL VERSION');
